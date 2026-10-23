@@ -1,0 +1,1597 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}body{margin:0}[hidden]{display:none!important}</style></head><body>
+<title>BrandSentinel</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&display=swap">
+<style>
+/* Layout: sticky bar with role switcher, tab row, then one working view. Review is two columns (draft | findings). */
+:root {
+  --bg: #F2F5F7; --surface: #FFFFFF; --surface2: #F7F9FA; --ink: #14213D; --muted: #566177; --line: #DCE2E8;
+  --accent: #0F766E; --accent-ink: #FFFFFF; --accent-soft: #DDF3F0; --accent-line: #9ED8D1;
+  --high: #B42318; --high-soft: #FDE9E7; --med: #A15C07; --med-soft: #FEF1DB; --low: #3555A8; --low-soft: #E6ECFA;
+  --ok: #0F7B45; --ok-soft: #E1F5EA; --ai: #6A3FB5; --ai-soft: #EFE8FB;
+  --ins: #0F7B45; --ins-bg: #DDF3E6; --del: #B42318; --del-bg: #FBE3E0;
+  --font: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; --mono: 'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --r: 10px; --shadow: 0 1px 2px rgba(20, 33, 61, .06), 0 4px 14px rgba(20, 33, 61, .05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D1424; --surface: #151F36; --surface2: #1B2742; --ink: #E7ECF5; --muted: #9AA7BF; --line: #2A3753;
+    --accent: #5CCFC2; --accent-ink: #072522; --accent-soft: #123D39; --accent-line: #226F67;
+    --high: #FF8F80; --high-soft: #3A1B1D; --med: #F2B45B; --med-soft: #382A12; --low: #8FAAF0; --low-soft: #1E2A4F;
+    --ok: #62D494; --ok-soft: #103423; --ai: #B99BF0; --ai-soft: #2A2047;
+    --ins: #62D494; --ins-bg: #123A27; --del: #FF8F80; --del-bg: #3E1D1F; --shadow: none; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D1424; --surface: #151F36; --surface2: #1B2742; --ink: #E7ECF5; --muted: #9AA7BF; --line: #2A3753;
+  --accent: #5CCFC2; --accent-ink: #072522; --accent-soft: #123D39; --accent-line: #226F67;
+  --high: #FF8F80; --high-soft: #3A1B1D; --med: #F2B45B; --med-soft: #382A12; --low: #8FAAF0; --low-soft: #1E2A4F;
+  --ok: #62D494; --ok-soft: #103423; --ai: #B99BF0; --ai-soft: #2A2047;
+  --ins: #62D494; --ins-bg: #123A27; --del: #FF8F80; --del-bg: #3E1D1F; --shadow: none; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 48px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+h1, h2, h3, h4 { margin: 0; text-wrap: balance; line-height: 1.2; }
+h2 { font-size: 22px; font-weight: 700; } h3 { font-size: 17px; font-weight: 700; } h4 { font-size: 14px; font-weight: 700; }
+p { margin: 0; } a { color: var(--accent); }
+.wrap { max-width: 1200px; margin: 0 auto; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.muted { color: var(--muted); } .small { font-size: 13px; }
+.stack { display: flex; flex-direction: column; gap: 14px; } .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.grow { flex: 1; min-width: 0; }
+
+/* top bar */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--bg); border-bottom: 1px solid var(--line); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--bg); }
+.bar .wrap { display: flex; align-items: center; gap: 14px; padding-block: 10px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 18px; letter-spacing: -.01em; margin-right: auto; }
+.brand svg { width: 26px; height: 26px; }
+.who { display: flex; align-items: center; gap: 8px; }
+.who label { font-size: 12px; color: var(--muted); }
+select, input[type=text], input[type=date], input[type=url], input[type=password], textarea { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+textarea { width: 100%; resize: vertical; line-height: 1.55; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tabs { display: flex; gap: 2px; overflow-x: auto; padding-block: 0; }
+.tab { background: none; border: 0; border-bottom: 3px solid transparent; padding: 10px 14px; cursor: pointer; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.tab[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab .n { background: var(--accent); color: var(--accent-ink); border-radius: 99px; font-size: 11px; padding: 1px 7px; margin-left: 6px; }
+main.wrap { padding-block: 22px; }
+
+/* controls */
+.btn { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 13px; cursor: pointer; font-weight: 600; font-size: 14px; }
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.danger { color: var(--high); } .btn.small { padding: 4px 10px; font-size: 13px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; box-shadow: var(--shadow); }
+.card.flat { box-shadow: none; background: var(--surface2); }
+.pill { display: inline-block; border-radius: 99px; padding: 1px 9px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.pill.high { background: var(--high-soft); color: var(--high); } .pill.medium { background: var(--med-soft); color: var(--med); } .pill.low { background: var(--low-soft); color: var(--low); }
+.pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.ai { background: var(--ai-soft); color: var(--ai); } .pill.plain { background: var(--surface2); color: var(--muted); border: 1px solid var(--line); }
+.pill.warn { background: var(--med-soft); color: var(--med); }
+.notice { border-radius: 8px; padding: 10px 12px; background: var(--accent-soft); border: 1px solid var(--accent-line); font-size: 14px; }
+.notice.warn { background: var(--med-soft); border-color: var(--med); }
+#toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 8px; z-index: 50; font-weight: 600; max-width: 90vw; }
+
+/* review */
+.cols { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 920px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { background: var(--surface); border: 0; padding: 6px 14px; cursor: pointer; font-weight: 600; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.doc { white-space: pre-wrap; line-height: 1.75; font-size: 15.5px; overflow-wrap: anywhere; background: var(--surface2); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-height: 180px; }
+mark { background: none; color: inherit; border-radius: 3px; cursor: pointer; padding: 0 1px; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+mark.high { background: var(--high-soft); text-decoration-color: var(--high); } mark.medium { background: var(--med-soft); text-decoration-color: var(--med); } mark.low { background: var(--low-soft); text-decoration-color: var(--low); }
+mark.ai { text-decoration-style: dashed; }
+mark.flash, .f.flash { outline: 3px solid var(--accent); }
+.sum { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.f { border: 1px solid var(--line); border-left-width: 5px; border-radius: var(--r); padding: 12px 14px; background: var(--surface); display: flex; flex-direction: column; gap: 9px; }
+.f.high { border-left-color: var(--high); } .f.medium { border-left-color: var(--med); } .f.low { border-left-color: var(--low); }
+.f.disputed { background: var(--surface2); }
+.f .head { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.quote { font-family: var(--mono); font-size: 12.5px; background: var(--surface2); border-radius: 6px; padding: 6px 9px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 2px 10px; font-size: 13px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
+.chip[aria-pressed="false"] { text-decoration: line-through; color: var(--muted); }
+.fix { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.fix .t { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.fix.blocked { background: var(--surface2); border-style: dashed; }
+ins, del { text-decoration: none; padding: 0 2px; border-radius: 3px; } ins { background: var(--ins-bg); color: var(--ins); } del { background: var(--del-bg); color: var(--del); text-decoration: line-through; }
+.receipt { border: 1px solid var(--accent-line); background: var(--accent-soft); border-radius: var(--r); padding: 11px 13px; }
+.receipt.ai { border-color: var(--ai); background: var(--ai-soft); }
+details > summary { cursor: pointer; font-weight: 600; } details[open] > summary { margin-bottom: 8px; }
+.sent { font-family: var(--mono); font-size: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; margin-top: 5px; overflow-wrap: anywhere; }
+.verified { display: flex; gap: 8px; align-items: baseline; font-size: 14px; }
+
+/* tables and bars */
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 7px 10px; border-bottom: 1px solid var(--line); }
+td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--surface2); }
+.bar-row { display: grid; grid-template-columns: minmax(110px, 200px) minmax(0, 1fr) 44px; gap: 10px; align-items: center; font-size: 14px; margin-block: 6px; }
+.bar-row .track { background: var(--surface2); border-radius: 6px; height: 14px; overflow: hidden; border: 1px solid var(--line); }
+.bar-row .fill { height: 100%; background: var(--accent); } .bar-row .fill.warn { background: var(--med); }
+.bar-row .v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.stat { display: flex; flex-direction: column; } .stat b { font-size: 28px; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--line); display: inline-block; vertical-align: middle; }
+.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.timeline li { padding-left: 14px; border-left: 3px solid var(--line); }
+.drop { border: 2px dashed var(--line); border-radius: 10px; padding: 14px; text-align: center; }
+.imgprev { max-width: 100%; max-height: 220px; border-radius: 8px; border: 1px solid var(--line); }
+label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
+.hint { font-weight: 400; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { mark, .btn { transition: background .15s, border-color .15s; } }
+
+.bar .tabs { flex-wrap: nowrap; }
+.row > label.f2 { flex: 1 1 200px; } .row > label.f2 input[type=file] { max-width: 100%; }
+.who { flex-wrap: wrap; }
+
+</style>
+<div id="app"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+/* BrandSentinel review engine. Pure functions, no DOM, no network. */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.BSEngine = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  const STOP = new Set(('a an the and or of to in on for with is are was were be been it its this that these those at by from as we you your our their they he she i not no do does did can will would should could may might have has had than then so if but into over per up out about more most all any each every just also very every enjoy get got').split(' '));
+  const CLAIM_TRIGGERS = new Set(['clinical', 'clinically', 'proven', 'guarantee', 'guarantees', 'guaranteed', 'certified', 'cure', 'cures', 'cured', 'treat', 'treats', 'prevent', 'prevents', 'reduce', 'reduces', 'lower', 'lowers', 'boost', 'boosts', 'best', 'only', 'first', 'doctor', 'doctors', 'scientifically', 'award', 'winning']);
+  const CLAIM_RE = /\b\d[\d,.]*\s?(%|percent|mg|kg|g|ml|oz|days?|years?|hours?|calories?|flavou?rs?|servings?)\b|\$\d|\b(clinically|proven|guarantee[sd]?|certified|award[- ]winning|number one|best|only|first|free shipping|made in|since \d{4}|cures?|treats?|prevents?|reduces?|lowers?|boosts?|doctors?|dermatologists?|scientifically|returns?)\b|#1/i;
+  const REGULATED_RE = /clinically|clinical|\bcures?\b|\btreats?\b|\bprevents?\b|diagnos|doctor|dermatolog|scientifically|medical|disease/i;
+  const SEV = { high: 0, medium: 1, low: 2 };
+
+  const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  function stem(w) {
+    w = w.toLowerCase();
+    if (w.length > 5 && w.endsWith('ing')) return w.slice(0, -3);
+    if (w.length > 4 && w.endsWith('ed')) return w.slice(0, -2);
+    if (w.length > 4 && w.endsWith('ly')) return w.slice(0, -2);
+    if (w.length > 4 && w.endsWith('es')) return w.slice(0, -2);
+    if (w.length > 3 && w.endsWith('s')) return w.slice(0, -1);
+    return w;
+  }
+  function contentStems(s) {
+    const ws = (s.toLowerCase().replace(/\d[\d,.]*/g, ' ').match(/[a-z][a-z'-]*/g) || []).filter((w) => w.length >= 3 && !STOP.has(w));
+    return ws.map(stem);
+  }
+  function wordCount(s) { return (s.match(/[A-Za-z0-9$%][\w'$%.,-]*/g) || []).length; }
+
+  /* ---------- numbers ---------- */
+  const NUM_RE = /(\$)?(\d[\d,]*(?:\.\d+)?)\s?(%|percent|mg|kg|ml|oz|g|days?|years?|hours?|minutes?|calories?|flavou?rs?|servings?)?(?![A-Za-z])/gi;
+  function normUnit(u, cur, value, hasComma) {
+    if (cur) return '$';
+    if (!u) return value >= 1900 && value <= 2100 && !hasComma ? 'yr' : '';
+    u = u.toLowerCase();
+    if (u === 'percent') return '%';
+    if (u === 'flavour' || u === 'flavours') return 'flavor';
+    return u.replace(/s$/, '') || u;
+  }
+  function numbersOf(s) {
+    const out = [];
+    let m;
+    NUM_RE.lastIndex = 0;
+    while ((m = NUM_RE.exec(s))) {
+      const value = parseFloat(m[2].replace(/,/g, ''));
+      if (isNaN(value)) continue;
+      out.push({ raw: m[0].trim(), value, unit: normUnit(m[3], m[1], value, m[2].includes(',')), index: m.index, end: m.index + m[0].trimEnd().length });
+    }
+    return out;
+  }
+
+  /* ---------- sentences ---------- */
+  function splitSentences(text) {
+    const out = [];
+    let start = 0;
+    const n = text.length;
+    const push = (e) => {
+      let s = start; while (s < e && /\s/.test(text[s])) s++;
+      let t = e; while (t > s && /\s/.test(text[t - 1])) t--;
+      if (t > s) out.push({ start: s, end: t, text: text.slice(s, t) });
+    };
+    for (let i = 0; i < n; i++) {
+      const c = text[i];
+      if (c === '\n') { push(i); start = i + 1; continue; }
+      if (c === '.' || c === '!' || c === '?') {
+        let j = i;
+        while (j + 1 < n && /[.!?]/.test(text[j + 1])) j++;
+        if (j + 1 >= n || /\s/.test(text[j + 1])) { push(j + 1); start = j + 1; }
+        i = j;
+      }
+    }
+    push(n);
+    return out;
+  }
+  function sentenceAt(sents, pos) { return sents.find((s) => pos >= s.start && pos < s.end) || sents.find((s) => pos === s.end) || null; }
+
+  /* ---------- readability ---------- */
+  function syllables(word) {
+    word = word.toLowerCase().replace(/[^a-z]/g, '');
+    if (!word) return 0;
+    if (word.length <= 3) return 1;
+    word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '').replace(/^y/, '');
+    const m = word.match(/[aeiouy]{1,2}/g);
+    return Math.max(1, m ? m.length : 1);
+  }
+  function fkGrade(text) {
+    const sents = splitSentences(text).filter((s) => wordCount(s.text) > 0);
+    const words = text.match(/[A-Za-z][A-Za-z'-]*/g) || [];
+    if (!sents.length || !words.length) return 0;
+    const syl = words.reduce((a, w) => a + syllables(w), 0);
+    return Math.max(0, 0.39 * (words.length / sents.length) + 11.8 * (syl / words.length) - 15.59);
+  }
+
+  /* ---------- colour ---------- */
+  function hexToRgb(hex) {
+    let h = String(hex).trim().replace('#', '');
+    if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+    if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  function rgbToHex(r, g, b) { return '#' + [r, g, b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('').toUpperCase(); }
+  function luminance(rgb) {
+    const [r, g, b] = rgb.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+  function contrastRatio(a, b) {
+    const A = hexToRgb(a), B = hexToRgb(b);
+    if (!A || !B) return null;
+    const la = luminance(A), lb = luminance(B);
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+  }
+  function colourDistance(a, b) { return Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2); }
+  function nearestPalette(rgb, palette) {
+    let best = null;
+    for (const p of palette) {
+      const prgb = hexToRgb(p.hex); if (!prgb) continue;
+      const d = colourDistance(rgb, prgb);
+      if (!best || d < best.distance) best = { name: p.name, hex: p.hex, distance: d };
+    }
+    return best;
+  }
+
+  /* ---------- facts ---------- */
+  function factStatus(fact, now) {
+    now = now || new Date();
+    if (fact.validUntil) {
+      const end = new Date(fact.validUntil + 'T23:59:59Z');
+      const days = Math.ceil((end - now) / 86400000);
+      if (end < now) return { state: 'expired', days, until: fact.validUntil };
+      if (days <= 30) return { state: 'expiring', days, until: fact.validUntil };
+      return { state: 'valid', days, until: fact.validUntil };
+    }
+    return { state: 'valid', days: null, until: null };
+  }
+  function matchFact(sentence, facts) {
+    const sw = new Set(contentStems(sentence));
+    let best = null;
+    for (const f of facts) {
+      if (f.enabled === false) continue;
+      const fw = [...new Set(contentStems(f.text))];
+      if (!fw.length) continue;
+      const overlap = fw.filter((w) => sw.has(w)).length;
+      const score = overlap / fw.length;
+      const ok = (overlap >= 2 && score >= 0.5) || (fw.length <= 2 && overlap === fw.length);
+      if (ok && (!best || score > best.score || (score === best.score && overlap > best.overlap))) best = { fact: f, score, overlap };
+    }
+    return best;
+  }
+  function weakFact(sentence, facts) {
+    const sw = new Set(contentStems(sentence));
+    let best = null;
+    for (const f of facts) {
+      if (f.enabled === false) continue;
+      const overlap = [...new Set(contentStems(f.text))].filter((w) => sw.has(w)).length;
+      if (overlap >= 1 && (!best || overlap > best.overlap)) best = { fact: f, overlap };
+    }
+    return best;
+  }
+
+  /* ---------- meaning check (improvement 2) ---------- */
+  function keepChips(sentence, opts) {
+    opts = opts || {};
+    const drop = new Set((opts.dropNumbers || []).map((x) => x.toLowerCase()));
+    const chips = [];
+    numbersOf(sentence).forEach((n) => { if (!drop.has(n.raw.toLowerCase())) chips.push(n.raw); });
+    const caps = sentence.match(/(?<=[a-z,;:)]\s)[A-Z][a-zA-Z]{2,}/g) || [];
+    caps.forEach((c) => { if (!chips.includes(c)) chips.push(c); });
+    const content = contentStems(sentence).filter((w) => !CLAIM_TRIGGERS.has(w) && !CLAIM_TRIGGERS.has(w + 's'));
+    const seen = new Set(chips.map((c) => stem(c)));
+    [...new Set(content)].sort((a, b) => b.length - a.length).slice(0, 3).forEach((w) => {
+      if (!seen.has(w) && !/^\d/.test(w)) { chips.push(w); seen.add(w); }
+    });
+    return chips;
+  }
+  function meaningCheck(original, rewrite, opts) {
+    opts = opts || {};
+    const rwStems = new Set(contentStems(rewrite));
+    const rwNums = numbersOf(rewrite);
+    const missing = [];
+    for (const k of (opts.mustKeep || []).map((x) => String(x).trim()).filter(Boolean)) {
+      if (/\d/.test(k)) {
+        const kn = numbersOf(k)[0];
+        const found = kn ? rwNums.some((n) => n.value === kn.value && n.unit === kn.unit) : rewrite.includes(k);
+        if (!found) missing.push(k);
+      } else {
+        const ks = contentStems(k);
+        const ok = ks.length ? ks.every((w) => rwStems.has(w)) : rewrite.toLowerCase().includes(k.toLowerCase());
+        if (!ok) missing.push(k);
+      }
+    }
+    const added = [];
+    const origNums = numbersOf(original);
+    const allowed = (opts.allowedNew || []).flatMap((t) => numbersOf(t));
+    rwNums.forEach((n) => {
+      const inOrig = origNums.some((o) => o.value === n.value && o.unit === n.unit);
+      const inAllowed = allowed.some((o) => o.value === n.value && o.unit === n.unit);
+      if (!inOrig && !inAllowed) added.push(n.raw);
+    });
+    const origStems = new Set(contentStems(original));
+    const allowStems = new Set((opts.allowedNew || []).flatMap(contentStems));
+    rwStems.forEach((w) => {
+      if (CLAIM_TRIGGERS.has(w) && !origStems.has(w) && !allowStems.has(w)) added.push(w);
+    });
+    const os = [...origStems];
+    const retained = os.length ? os.filter((w) => rwStems.has(w)).length / os.length : 1;
+    return { ok: missing.length === 0 && added.length === 0, missing, added, retained };
+  }
+
+  function tidy(s) { return s.replace(/\b([A-Za-z]{3,}) \1\b/gi, '$1').replace(/ {2,}/g, ' ').replace(/ ([,.;:!?])/g, '$1').replace(/\( /g, '('); }
+  function applyFix(text, finding, fix) {
+    return tidy(text.slice(0, finding.start) + fix.replacement + text.slice(finding.end)).replace(/^ +/, '');
+  }
+  function contextAfter(text, finding, fix) {
+    const cs = finding.ctxStart, ce = finding.ctxEnd;
+    const before = text.slice(cs, ce);
+    const after = tidy(text.slice(cs, finding.start) + fix.replacement + text.slice(finding.end, ce));
+    return { before, after };
+  }
+  function evaluateFixes(finding, text, mustKeep) {
+    const keep = mustKeep || finding.keep || [];
+    const ok = [], blocked = [];
+    for (const fx of finding.fixes || []) {
+      const { before, after } = contextAfter(text, finding, fx);
+      const check = meaningCheck(before, after, { mustKeep: keep, allowedNew: finding.allowedNew || [] });
+      const item = Object.assign({}, fx, { before, after, check });
+      (check.ok ? ok : blocked).push(item);
+    }
+    return { ok, blocked };
+  }
+
+  /* ---------- helpers for building findings ---------- */
+  function matchCase(found, repl) {
+    if (!repl) return repl;
+    if (found === found.toUpperCase() && found.length > 1) return repl.toUpperCase();
+    if (found[0] === found[0].toUpperCase()) return repl[0].toUpperCase() + repl.slice(1);
+    return repl;
+  }
+  function splitLong(sentence) {
+    const mid = sentence.length / 2;
+    const cands = [];
+    const re = /(, and |, but |; |, so )/g;
+    let m;
+    while ((m = re.exec(sentence))) cands.push({ i: m.index, len: m[0].length, kind: m[0] });
+    if (!cands.length) return null;
+    cands.sort((a, b) => Math.abs(a.i - mid) - Math.abs(b.i - mid));
+    const c = cands[0];
+    const left = sentence.slice(0, c.i).replace(/[.!?]+$/, '');
+    let right = sentence.slice(c.i + c.len);
+    const joiner = c.kind.trim().replace(/^[,;]\s*/, '');
+    if (joiner === 'but' || joiner === 'so') right = joiner[0].toUpperCase() + joiner.slice(1) + ', ' + right;
+    else right = right[0].toUpperCase() + right.slice(1);
+    return left + '. ' + right;
+  }
+  const SOFTEN = [
+    [/clinically proven to reduce/i, 'made to help with'], [/clinically proven to/i, 'made to'], [/clinically proven/i, 'formulated'],
+    [/guarantees?/i, 'aims to deliver'], [/\bcures?\b/i, 'may help with'], [/\bprevents?\b/i, 'may help limit'], [/\bthe best\b/i, 'a great'],
+  ];
+  function soften(sentence) {
+    let out = sentence;
+    for (const [re, rep] of SOFTEN) if (re.test(out)) { out = out.replace(re, (m) => matchCase(m, rep)); break; }
+    return out === sentence ? null : out;
+  }
+
+  function sourceLabel(sources, id) {
+    for (const k of ['rules', 'terms', 'facts']) {
+      const it = (sources[k] || []).find((x) => x.id === id);
+      if (it) return (it.source || sources.name || 'Source library') + ' · ' + it.id;
+    }
+    return id;
+  }
+
+  /* ---------- main review ---------- */
+  function reviewText(text, sources, opts) {
+    opts = opts || {};
+    const now = opts.now || new Date();
+    const rules = {};
+    (sources.rules || []).forEach((r) => { rules[r.id] = r; });
+    const on = (id) => rules[id] && rules[id].enabled !== false;
+    const sents = splitSentences(text);
+    const findings = [];
+    const verified = [];
+    const add = (f) => {
+      const s = sentenceAt(sents, Math.max(0, f.start >= 0 ? f.start : 0));
+      f.ctxStart = f.ctxStart !== undefined ? f.ctxStart : (s ? s.start : f.start);
+      f.ctxEnd = f.ctxEnd !== undefined ? f.ctxEnd : (s ? s.end : f.end);
+      f.key = f.ruleId + '|' + (f.quote || '').toLowerCase();
+      f.id = 'F' + (findings.length + 1);
+      f.status = 'open';
+      f.origin = f.origin || 'rule';
+      f.confidence = f.confidence !== undefined ? f.confidence : 1;
+      f.sourceLabel = sourceLabel(sources, f.sourceId || f.ruleId);
+      f.fixes = (f.fixes || []).map((fx, i) => Object.assign({ id: f.id + '-' + (i + 1) }, fx));
+      if (f.start >= 0 && f.keep === undefined) {
+        f.keep = keepChips(text.slice(f.ctxStart, f.ctxEnd), { dropNumbers: f.dropNumbers });
+        if (f.category !== 'claim' && f.end - f.start < f.ctxEnd - f.ctxStart) {
+          // A word-level fix is meant to change the quoted words, so they are not part of the meaning to preserve.
+          const q = new Set(contentStems(f.quote)), ql = f.quote.toLowerCase();
+          f.keep = f.keep.filter((c) => { const cs = contentStems(c); return !(ql.includes(c.toLowerCase()) || (cs.length && cs.every((w) => q.has(w)))); });
+        }
+      }
+      findings.push(f);
+    };
+
+    /* terminology */
+    for (const t of sources.terms || []) {
+      if (t.enabled === false) continue;
+      const re = new RegExp('(?<![A-Za-z])' + escapeRe(t.avoid) + '(?![A-Za-z])', 'gi');
+      let m;
+      while ((m = re.exec(text))) {
+        const repl = t.prefer ? matchCase(m[0], t.prefer) : '';
+        add({
+          ruleId: t.id, sourceId: t.id, category: 'terminology', severity: t.severity || 'medium',
+          start: m.index, end: m.index + m[0].length, quote: m[0],
+          title: t.prefer ? 'Use "' + t.prefer + '" instead of "' + m[0] + '"' : 'Avoid "' + m[0] + '"',
+          explanation: t.reason, fixes: [{ label: t.prefer ? 'Change to "' + repl + '"' : 'Remove "' + m[0] + '"', replacement: repl }],
+        });
+      }
+    }
+
+    /* tone */
+    if (on('R-TONE-EXCL')) {
+      const max = (rules['R-TONE-EXCL'].params || {}).max ?? 1;
+      let count = 0, m; const re = /!+(?!\[)/g;
+      while ((m = re.exec(text))) {
+        count++;
+        if (count > max) add({
+          ruleId: 'R-TONE-EXCL', category: 'tone', severity: 'low', start: m.index, end: m.index + m[0].length, quote: m[0],
+          title: 'Too many exclamation marks', explanation: rules['R-TONE-EXCL'].text,
+          fixes: [{ label: 'End the sentence with a full stop', replacement: '.' }],
+        });
+      }
+    }
+    if (on('R-TONE-HYPE')) {
+      for (const h of (rules['R-TONE-HYPE'].params || {}).words || []) {
+        const re = new RegExp('(?<![A-Za-z])' + escapeRe(h.word) + '(?![A-Za-z])\\s?', 'gi');
+        let m;
+        while ((m = re.exec(text))) {
+          const found = m[0].trimEnd();
+          add({
+            ruleId: 'R-TONE-HYPE', category: 'tone', severity: 'medium', start: m.index, end: m.index + found.length, quote: found,
+            title: '"' + found + '" sounds like hype', explanation: h.why || rules['R-TONE-HYPE'].text,
+            fixes: [{ label: h.alt ? 'Change to "' + h.alt + '"' : 'Remove "' + found + '"', replacement: h.alt ? matchCase(found, h.alt) : '' }],
+          });
+        }
+      }
+    }
+    if (on('R-TONE-CAPS')) {
+      const allow = new Set(((rules['R-TONE-CAPS'].params || {}).allow || []).map((x) => x.toUpperCase()));
+      const re = /\b[A-Z]{4,}\b/g; let m;
+      while ((m = re.exec(text))) {
+        if (allow.has(m[0])) continue;
+        add({
+          ruleId: 'R-TONE-CAPS', category: 'tone', severity: 'low', start: m.index, end: m.index + m[0].length, quote: m[0],
+          title: 'Shouting in capitals', explanation: rules['R-TONE-CAPS'].text,
+          fixes: [{ label: 'Use normal case: "' + m[0][0] + m[0].slice(1).toLowerCase() + '"', replacement: m[0][0] + m[0].slice(1).toLowerCase() }],
+        });
+      }
+    }
+
+    /* readability */
+    if (on('R-READ-LEN')) {
+      const max = (rules['R-READ-LEN'].params || {}).maxWords || 28;
+      for (const s of sents) {
+        const wc = wordCount(s.text);
+        if (wc > max) {
+          const sp = splitLong(s.text);
+          add({
+            ruleId: 'R-READ-LEN', category: 'readability', severity: 'low', start: s.start, end: s.end, quote: s.text,
+            title: 'Sentence has ' + wc + ' words (limit ' + max + ')', explanation: rules['R-READ-LEN'].text,
+            fixes: sp ? [{ label: 'Split into two sentences', replacement: sp }] : [],
+          });
+        }
+      }
+    }
+    const grade = fkGrade(text);
+    if (on('R-READ-GRADE') && wordCount(text) >= 40 && grade > ((rules['R-READ-GRADE'].params || {}).maxGrade || 10)) {
+      add({
+        ruleId: 'R-READ-GRADE', category: 'readability', severity: 'low', start: -1, end: -1, quote: '',
+        title: 'Reading level is grade ' + grade.toFixed(1), explanation: rules['R-READ-GRADE'].text, fixes: [],
+      });
+    }
+
+    /* accessibility in text */
+    if (on('R-A11Y-ALT')) {
+      let m; const md = /!\[\s*\]\([^)]*\)/g;
+      while ((m = md.exec(text))) add({ ruleId: 'R-A11Y-ALT', category: 'accessibility', severity: 'high', start: m.index, end: m.index + m[0].length, quote: m[0], title: 'Image has no alt text', explanation: rules['R-A11Y-ALT'].text, fixes: [], keep: [] });
+      const html = /<img\b(?![^>]*\balt\s*=\s*"[^"]+")[^>]*>/gi;
+      while ((m = html.exec(text))) add({ ruleId: 'R-A11Y-ALT', category: 'accessibility', severity: 'high', start: m.index, end: m.index + m[0].length, quote: m[0], title: 'Image has no alt text', explanation: rules['R-A11Y-ALT'].text, fixes: [], keep: [] });
+    }
+    if (on('R-A11Y-LINK')) {
+      const re = /\[(click here|here|read more|link)\]\([^)]*\)|\bclick here\b/gi; let m;
+      while ((m = re.exec(text))) add({ ruleId: 'R-A11Y-LINK', category: 'accessibility', severity: 'low', start: m.index, end: m.index + m[0].length, quote: m[0], title: 'Link text does not say where it goes', explanation: rules['R-A11Y-LINK'].text, fixes: [], keep: [] });
+    }
+
+    /* claims against approved facts (improvement 1 lives here) */
+    const facts = (sources.facts || []).filter((f) => f.enabled !== false);
+    if (on('R-CONF-1')) {
+      for (const term of sources.confidential || []) {
+        if (!term.trim()) continue;
+        const re = new RegExp('(?<![A-Za-z])' + escapeRe(term.trim()) + '(?![A-Za-z])', 'gi'); let m;
+        while ((m = re.exec(text))) add({
+          ruleId: 'R-CONF-1', category: 'confidentiality', severity: 'high', start: m.index, end: m.index + m[0].length, quote: m[0],
+          title: '"' + m[0] + '" is a confidential name', explanation: rules['R-CONF-1'].text,
+          needsSpecialist: true, fixes: [{ label: 'Remove "' + m[0] + '"', replacement: '' }],
+        });
+      }
+    }
+    const units = [];
+    for (const s of sents) {
+      const re = /,\s+and\s+|;\s+|,\s+but\s+/g; let last = 0, m;
+      const parts = [];
+      while ((m = re.exec(s.text))) { parts.push([last, m.index]); last = m.index + m[0].length; }
+      parts.push([last, s.text.length]);
+      for (const [a, b] of parts) units.push({ start: s.start + a, end: s.start + b, text: s.text.slice(a, b) });
+    }
+    if (on('R-CLAIM-1')) {
+      for (const s of units) {
+        if (!CLAIM_RE.test(s.text)) continue;
+        const m = matchFact(s.text, facts);
+        const regulated = REGULATED_RE.test(s.text);
+        if (!m) {
+          const weak = weakFact(s.text, facts);
+          const fixes = [];
+          const soft = soften(s.text);
+          if (soft) fixes.push({ label: 'Soften the wording (still needs legal review)', replacement: soft });
+          if (weak) fixes.push({ label: 'Use approved wording: "' + weak.fact.text + '"', replacement: weak.fact.text.replace(/[.]*$/, '.') });
+          fixes.push({ label: 'Remove this claim', replacement: '' });
+          add({
+            ruleId: regulated ? 'R-CLAIM-REG' : 'R-CLAIM-1', sourceId: regulated && on('R-CLAIM-REG') ? 'R-CLAIM-REG' : 'R-CLAIM-1',
+            category: 'claim', severity: regulated ? 'high' : 'medium', start: s.start, end: s.end, quote: s.text,
+            title: 'Unverified claim: no approved fact supports this',
+            explanation: 'No approved fact in the library backs this statement. ' + (regulated ? 'It sounds like a health or scientific claim, so it needs legal sign-off with evidence. ' : '') + 'Add evidence to the fact library, reword it, or send it for human review.',
+            unverified: true, needsSpecialist: true, fixes, confidence: 0.9,
+          });
+          continue;
+        }
+        const f = m.fact, st = factStatus(f, now);
+        const fnums = numbersOf(f.text);
+        const conflicts = numbersOf(s.text).filter((n) => fnums.some((x) => x.unit === n.unit && x.unit !== '' && x.value !== n.value));
+        if (conflicts.length) {
+          const c = conflicts[0];
+          const fn = fnums.find((x) => x.unit === c.unit);
+          add({
+            ruleId: 'R-CLAIM-1', sourceId: f.id, category: 'claim', severity: 'high', start: s.start + c.index, end: s.start + c.end, quote: c.raw,
+            ctxStart: s.start, ctxEnd: s.end, dropNumbers: [c.raw],
+            title: 'Says ' + c.raw + ', approved fact says ' + fn.raw, explanation: 'Approved fact ' + f.id + ': "' + f.text + '". The draft number does not match.',
+            needsSpecialist: true, allowedNew: [fn.raw], fixes: [{ label: 'Change to "' + fn.raw + '"', replacement: fn.raw }], confidence: 0.95, factId: f.id,
+          });
+        } else if (st.state === 'expired') {
+          const alt = facts.find((x) => x.id !== f.id && x.replaces === f.id && factStatus(x, now).state !== 'expired');
+          add({
+            ruleId: 'R-FACT-EXPIRED', sourceId: f.id, category: 'claim', severity: 'high', start: s.start, end: s.end, quote: s.text,
+            title: 'Outdated: approved fact expired on ' + st.until,
+            explanation: 'This statement matches "' + f.text + '", which was only valid until ' + st.until + '. Ask the brand manager to renew the fact, or remove the claim.',
+            needsSpecialist: true, factId: f.id, confidence: 0.95, keep: [],
+            fixes: alt ? [{ label: 'Use current fact: "' + alt.text + '"', replacement: alt.text.replace(/[.]*$/, '.') }] : [],
+          });
+        } else if (st.state === 'expiring') {
+          add({
+            ruleId: 'R-FACT-EXPIRING', sourceId: f.id, category: 'claim', severity: 'low', start: s.start, end: s.end, quote: s.text,
+            title: 'Fact expires in ' + st.days + ' day' + (st.days === 1 ? '' : 's'),
+            explanation: 'This statement relies on "' + f.text + '", valid until ' + st.until + '. Check the publish date is before then.',
+            factId: f.id, confidence: 0.95, fixes: [],
+          });
+        } else {
+          verified.push({ sentence: s.text, factId: f.id, factText: f.text, until: st.until });
+        }
+      }
+    }
+
+    findings.sort((a, b) => SEV[a.severity] - SEV[b.severity] || a.start - b.start);
+    findings.forEach((f, i) => { f.id = 'F' + (i + 1); f.fixes.forEach((fx, j) => { fx.id = f.id + '-' + (j + 1); }); });
+    return { findings, verified, stats: { sentences: sents.length, words: wordCount(text), grade } };
+  }
+
+  /* ---------- image / visual checks ---------- */
+  function checkVisual(input, sources) {
+    const rules = {}; (sources.rules || []).forEach((r) => { rules[r.id] = r; });
+    const on = (id) => rules[id] && rules[id].enabled !== false;
+    const out = []; let n = 0;
+    const push = (f) => { f.id = 'V' + (++n); f.status = 'open'; f.origin = 'rule'; f.confidence = 1; f.start = -1; f.end = -1; f.fixes = []; f.sourceLabel = sourceLabel(sources, f.ruleId); out.push(f); };
+    if (on('R-A11Y-ALT') && !(input.alt || '').trim()) push({ ruleId: 'R-A11Y-ALT', category: 'accessibility', severity: 'high', quote: '', title: 'Image has no alt text', explanation: rules['R-A11Y-ALT'].text });
+    if (input.fg && input.bg && on('R-A11Y-CONTRAST')) {
+      const r = contrastRatio(input.fg, input.bg);
+      const min = (rules['R-A11Y-CONTRAST'].params || {}).min || 4.5;
+      if (r !== null && r < min) push({ ruleId: 'R-A11Y-CONTRAST', category: 'accessibility', severity: 'high', quote: '', title: 'Text contrast is ' + r.toFixed(2) + ':1 (needs ' + min + ':1)', explanation: rules['R-A11Y-CONTRAST'].text });
+    }
+    if (on('R-VIS-PALETTE')) {
+      const tol = (rules['R-VIS-PALETTE'].params || {}).tolerance || 60;
+      (input.dominant || []).filter((d) => d.share >= 0.1).forEach((d) => {
+        const rgb = hexToRgb(d.hex); if (!rgb) return;
+        const np = nearestPalette(rgb, sources.palette || []);
+        if (np && np.distance > tol) push({ ruleId: 'R-VIS-PALETTE', category: 'visual', severity: 'medium', quote: d.hex, title: Math.round(d.share * 100) + '% of the image is ' + d.hex + ', which is not a brand colour', explanation: rules['R-VIS-PALETTE'].text + ' Closest brand colour: ' + np.name + ' ' + np.hex + '.' });
+      });
+    }
+    if (input.isLogo && on('R-VIS-LOGO')) {
+      const min = (rules['R-VIS-LOGO'].params || {}).minWidth || 120;
+      if (input.width && input.width < min) push({ ruleId: 'R-VIS-LOGO', category: 'visual', severity: 'medium', quote: '', title: 'Logo is ' + input.width + 'px wide (minimum ' + min + 'px)', explanation: rules['R-VIS-LOGO'].text });
+    }
+    return out;
+  }
+
+  /* ---------- privacy: redaction and retrieval ---------- */
+  function redact(text, confidential) {
+    let out = text; const log = {};
+    const bump = (k, c) => { if (c) log[k] = (log[k] || 0) + c; };
+    for (const term of confidential || []) {
+      if (!term.trim()) continue;
+      const re = new RegExp(escapeRe(term.trim()), 'gi');
+      out = out.replace(re, () => { bump('confidential term', 1); return '[CONFIDENTIAL]'; });
+    }
+    out = out.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, () => { bump('email', 1); return '[EMAIL]'; });
+    out = out.replace(/(?<![\w$])\+?\d[\d\s-]{8,}\d(?!\w)/g, (m) => { if (/[.]/.test(m)) return m; bump('phone', 1); return '[PHONE]'; });
+    return { text: out, redactions: Object.entries(log).map(([kind, count]) => ({ kind, count })) };
+  }
+  function retrieve(segment, sources, k) {
+    const sw = new Set(contentStems(segment));
+    const items = [];
+    (sources.rules || []).filter((r) => r.enabled !== false).forEach((r) => items.push({ id: r.id, type: 'rule', text: r.title + '. ' + r.text }));
+    (sources.terms || []).filter((t) => t.enabled !== false).forEach((t) => items.push({ id: t.id, type: 'term', text: 'Avoid "' + t.avoid + '"' + (t.prefer ? ', prefer "' + t.prefer + '"' : '') + '. ' + t.reason }));
+    (sources.facts || []).filter((f) => f.enabled !== false).forEach((f) => items.push({ id: f.id, type: 'fact', text: f.text }));
+    (sources.guidelines || []).forEach((g) => items.push({ id: g.id, type: 'guideline', text: g.text }));
+    return items.map((it) => ({ it, s: contentStems(it.text).filter((w) => sw.has(w)).length + (it.type === 'guideline' ? 0.5 : 0) }))
+      .sort((a, b) => b.s - a.s).slice(0, k || 6).map((x) => x.it);
+  }
+
+  /* ---------- evaluation on a labelled set ---------- */
+  function evaluateSet(cases, sources, opts) {
+    let planted = 0, caught = 0, flagged = 0, tp = 0; const misses = [], falsePos = [];
+    for (const c of cases) {
+      const res = reviewText(c.text, sources, opts);
+      const used = new Set();
+      for (const p of c.planted || []) {
+        planted++;
+        const hit = res.findings.findIndex((f, i) => !used.has(i) && f.ruleId === p.ruleId && (f.quote + ' ' + text_ctx(c.text, f)).toLowerCase().includes(p.contains.toLowerCase()));
+        if (hit >= 0) { caught++; used.add(hit); } else misses.push({ case: c.id, ruleId: p.ruleId, contains: p.contains });
+      }
+      res.findings.forEach((f, i) => {
+        if (['R-READ-GRADE', 'R-FACT-EXPIRING'].includes(f.ruleId) && !(c.planted || []).some((p) => p.ruleId === f.ruleId)) return;
+        flagged++;
+        if (used.has(i)) tp++; else falsePos.push({ case: c.id, ruleId: f.ruleId, quote: f.quote });
+      });
+    }
+    return { planted, caught, recall: planted ? caught / planted : 1, flagged, precision: flagged ? tp / flagged : 1, misses, falsePos, cases: cases.length };
+  }
+  function text_ctx(text, f) { return f.start >= 0 ? text.slice(f.ctxStart, f.ctxEnd) : ''; }
+
+  return {
+    splitSentences, numbersOf, contentStems, keepChips, meaningCheck, evaluateFixes, applyFix, reviewText, checkVisual, redact, retrieve, evaluateSet,
+    factStatus, matchFact, fkGrade, syllables, contrastRatio, hexToRgb, rgbToHex, nearestPalette, sourceLabel, wordCount, CLAIM_RE, REGULATED_RE, tidy,
+  };
+});
+
+/* Demo brand "Tidewell" (made up by the team), sample drafts, seed history and labelled test set. No real customer data. */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.BSData = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+  const SRC = 'Tidewell Brand Guide v3';
+  const sources = {
+    name: SRC, version: 3,
+    rules: [
+      { id: 'R-TONE-EXCL', category: 'tone', title: 'Exclamation marks', text: 'Use at most one exclamation mark per piece. Tidewell sounds warm and calm, not loud.', params: { max: 1 }, source: SRC + ' §1.2' },
+      { id: 'R-TONE-HYPE', category: 'tone', title: 'No hype words', text: 'Avoid hype words. Say what the product does and let people decide.', source: SRC + ' §1.3', params: { words: [
+        { word: 'amazing', alt: '', why: 'Hype word. Tidewell describes what the mix does instead of calling it amazing.' },
+        { word: 'game-changing', alt: 'new', why: '"Game-changing" is an overclaim and is on the avoid list in section 1.3.' },
+        { word: 'revolutionary', alt: 'new', why: '"Revolutionary" is an overclaim and is on the avoid list in section 1.3.' },
+        { word: 'miracle', alt: '', why: '"Miracle" suggests a health promise we cannot support.' },
+        { word: 'best-in-class', alt: 'well made', why: 'Comparative boasts need evidence we do not hold.' },
+      ] } },
+      { id: 'R-TONE-CAPS', category: 'tone', title: 'No shouting', text: 'Do not write whole words in capitals. Use bold sparingly instead.', params: { allow: ['USDA', 'FAQ', 'NASA'] }, source: SRC + ' §1.4' },
+      { id: 'R-READ-LEN', category: 'readability', title: 'Sentence length', text: 'Keep sentences under 28 words so they are easy to read on a phone.', params: { maxWords: 28 }, source: SRC + ' §1.5' },
+      { id: 'R-READ-GRADE', category: 'readability', title: 'Reading level', text: 'Aim for a reading level of grade 10 or lower so most readers can follow without effort.', params: { maxGrade: 10 }, source: SRC + ' §1.5' },
+      { id: 'R-A11Y-ALT', category: 'accessibility', title: 'Alt text', text: 'Every image needs alt text that says what the image shows, so screen reader users get the same information.', source: SRC + ' §5.1 (WCAG 1.1.1)' },
+      { id: 'R-A11Y-LINK', category: 'accessibility', title: 'Link text', text: 'Link text must make sense on its own. Avoid "click here" and "read more".', source: SRC + ' §5.2 (WCAG 2.4.4)' },
+      { id: 'R-A11Y-CONTRAST', category: 'accessibility', title: 'Text contrast', text: 'Normal text needs a contrast ratio of at least 4.5:1 against its background.', params: { min: 4.5 }, source: SRC + ' §5.3 (WCAG 1.4.3)' },
+      { id: 'R-VIS-PALETTE', category: 'visual', title: 'Brand colours', text: 'Large areas of colour in images should come from the brand palette.', params: { tolerance: 60 }, source: SRC + ' §4.1' },
+      { id: 'R-VIS-LOGO', category: 'visual', title: 'Logo size', text: 'The Tidewell logo must be at least 120 px wide on screen so the wordmark stays readable.', params: { minWidth: 120 }, source: SRC + ' §4.2' },
+      { id: 'R-CLAIM-1', category: 'claim', title: 'Claims need approved facts', text: 'Every factual claim must match an approved, in-date fact in the library.', source: SRC + ' §3.1' },
+      { id: 'R-CLAIM-REG', category: 'claim', title: 'Health and science claims', text: 'Health, scientific and medical claims need written evidence and Legal sign-off before publishing.', source: SRC + ' §3.2' },
+      { id: 'R-FACT-EXPIRED', category: 'claim', title: 'Expired facts', text: 'Facts have a valid-until date. Do not publish claims that rely on an expired fact.', source: SRC + ' §3.3' },
+      { id: 'R-FACT-EXPIRING', category: 'claim', title: 'Facts about to expire', text: 'Check the publish date against the fact\'s valid-until date.', source: SRC + ' §3.3' },
+      { id: 'R-CONF-1', category: 'confidentiality', title: 'Confidential names', text: 'Internal project names and unreleased plans must never appear in public copy.', source: SRC + ' §6.1' },
+    ],
+    terms: [
+      { id: 'T-01', avoid: 'cheap', prefer: 'affordable', severity: 'medium', reason: 'Tidewell is positioned as good value, not low quality. Say "affordable".', source: SRC + ' §2.1' },
+      { id: 'T-02', avoid: 'guys', prefer: 'everyone', severity: 'low', reason: 'Use inclusive greetings.', source: SRC + ' §2.2' },
+      { id: 'T-03', avoid: 'sugar-free', prefer: 'no added sugar', severity: 'high', reason: 'Our mix contains naturally occurring sugars, so "sugar-free" is inaccurate. Say "no added sugar".', source: SRC + ' §2.3' },
+      { id: 'T-04', avoid: 'powder', prefer: 'electrolyte mix', severity: 'medium', reason: 'The product name is "Tidewell Electrolyte Mix". Do not call it powder.', source: SRC + ' §2.4' },
+      { id: 'T-05', avoid: 'all-natural', prefer: 'made with natural flavours', severity: 'high', reason: '"All-natural" is a regulated term we cannot support.', source: SRC + ' §2.5' },
+    ],
+    facts: [
+      { id: 'F-01', text: 'Each serving contains 500 mg of sodium.', validUntil: '2027-06-30', evidence: 'Lab report LR-2026-114' },
+      { id: 'F-02', text: 'Tidewell is made in Portland, Oregon.', validUntil: '', evidence: 'Company registration' },
+      { id: 'F-03', text: 'Tidewell has been a Certified B Corp since 2022.', validUntil: '', evidence: 'B Lab certificate' },
+      { id: 'F-04', text: 'Free shipping on orders over $40.', validUntil: '2026-09-30', evidence: 'Autumn promotion brief' },
+      { id: 'F-05', text: 'Orders ship within 2 days.', validUntil: '2026-11-15', evidence: 'Warehouse SLA' },
+      { id: 'F-06', text: 'Returns are accepted within 30 days.', validUntil: '', evidence: 'Returns policy' },
+      { id: 'F-07', text: 'Shipping rates are calculated at checkout.', validUntil: '', evidence: 'Shop settings', replaces: 'F-04' },
+      { id: 'F-08', text: 'Tidewell comes in 4 flavours.', validUntil: '', evidence: 'Product catalogue' },
+    ],
+    palette: [
+      { name: 'Tide Navy', hex: '#14213D' }, { name: 'Wave Teal', hex: '#0F766E' }, { name: 'Sea Foam', hex: '#7FD8CF' },
+      { name: 'Salt White', hex: '#FBFBF8' }, { name: 'Buoy Orange', hex: '#E76F51' },
+    ],
+    confidential: ['Project Marlin', 'Q4 pricing plan'],
+    guidelines: [
+      { id: 'G-1', text: 'Voice: warm, plain-spoken and confident, never boastful. Speak to one reader as "you".' },
+      { id: 'G-2', text: 'Never compare Tidewell to named competitors.' },
+      { id: 'G-3', text: 'Never shame people about their bodies, fitness or diet.' },
+    ],
+  };
+
+  const users = [
+    { id: 'u-asha', name: 'Asha Rao', role: 'writer' },
+    { id: 'u-ravi', name: 'Ravi Nair', role: 'writer' },
+    { id: 'u-dev', name: 'Dev Malhotra', role: 'brand_manager' },
+    { id: 'u-meera', name: 'Meera Iyer', role: 'legal' },
+    { id: 'u-sam', name: 'Sam Park', role: 'admin' },
+  ];
+  const roleNames = { writer: 'Writer', brand_manager: 'Brand manager', legal: 'Legal reviewer', admin: 'Admin' };
+
+  const samples = [
+    {
+      id: 's1', label: 'Launch email (many problems)', title: 'Autumn launch email',
+      text: 'Hey guys! Tidewell is the AMAZING new electrolyte powder that is cheap and sugar-free!! Each serving packs 600 mg of sodium. Clinically proven to reduce cramps and recover faster. Enjoy free shipping on every order over $40. Made in Portland, Oregon, and certified as a B Corp since 2022. Tidewell comes in 5 flavours. Questions about Project Marlin? Email priya@tidewell.example or call +91 98765 43210.\n\n![](hero.png)\n\nClick here to order.',
+    },
+    {
+      id: 's2', label: 'Product page (nearly clean)', title: 'Product page copy',
+      text: 'Tidewell makes it easy to stay hydrated. Stir one scoop into water and go. Each serving contains 500 mg of sodium. Orders ship within 2 days. Returns are accepted within 30 days. Tidewell is made in Portland, Oregon.',
+    },
+    {
+      id: 's3', label: 'Social post (tone problems)', title: 'Instagram caption',
+      text: 'This revolutionary mix is a game-changing way to hydrate! Say goodbye to cramps with the best-in-class formula. Our all-natural recipe is ready for your next run!',
+    },
+  ];
+
+  /* Labelled test set written by the team. ruleId is the rule that should fire; contains is text the finding should cover. */
+  const evalSet = [
+    { id: 'E01', text: 'Our cheap electrolyte mix is great for runners.', planted: [{ ruleId: 'T-01', contains: 'cheap' }] },
+    { id: 'E02', text: 'Hey guys, welcome to the Tidewell family.', planted: [{ ruleId: 'T-02', contains: 'guys' }] },
+    { id: 'E03', text: 'A sugar-free way to hydrate on long runs.', planted: [{ ruleId: 'T-03', contains: 'sugar-free' }] },
+    { id: 'E04', text: 'This game-changing blend is made for everyone.', planted: [{ ruleId: 'R-TONE-HYPE', contains: 'game-changing' }] },
+    { id: 'E05', text: 'Our new mix is here! Try it today! Share it with a friend!', planted: [{ ruleId: 'R-TONE-EXCL', contains: '!' }, { ruleId: 'R-TONE-EXCL', contains: '!' }] },
+    { id: 'E06', text: 'Each serving contains 450 mg of sodium.', planted: [{ ruleId: 'R-CLAIM-1', contains: '450 mg' }] },
+    { id: 'E07', text: 'Tidewell is clinically proven to cure cramps.', planted: [{ ruleId: 'R-CLAIM-REG', contains: 'clinically' }] },
+    { id: 'E08', text: 'Get free shipping on orders over $40.', planted: [{ ruleId: 'R-FACT-EXPIRED', contains: 'free shipping' }] },
+    { id: 'E09', text: '![](team.png)\n\nMeet the team behind Tidewell.', planted: [{ ruleId: 'R-A11Y-ALT', contains: '![](' }] },
+    { id: 'E10', text: 'Tidewell is made in Portland, Oregon. Each serving contains 500 mg of sodium. Returns are accepted within 30 days.', planted: [] },
+    { id: 'E11', text: 'Project Marlin launches next month.', planted: [{ ruleId: 'R-CONF-1', contains: 'Project Marlin' }] },
+    { id: 'E12', text: 'Tidewell was created by a small team of athletes in Portland who wanted a better way to stay hydrated on long trail runs, and they spent years testing every recipe with real runners before they felt ready to share it with the world.', planted: [{ ruleId: 'R-READ-LEN', contains: 'Tidewell was created' }] },
+    { id: 'E13', text: 'To order a pack, click here.', planted: [{ ruleId: 'R-A11Y-LINK', contains: 'click here' }] },
+    { id: 'E14', text: 'Tidewell makes it easy to stay hydrated. Stir one scoop into water and go.', planted: [] },
+    { id: 'E15', text: 'Tidewell has been a Certified B Corp since 2019.', planted: [{ ruleId: 'R-CLAIM-1', contains: '2019' }] },
+    { id: 'E16', text: 'Our all-natural recipe is ready for your next run.', planted: [{ ruleId: 'T-05', contains: 'all-natural' }] },
+    { id: 'E17', text: 'Tidewell comes in 5 flavours.', planted: [{ ruleId: 'R-CLAIM-1', contains: '5 flavours' }] },
+    { id: 'E18', text: 'The mix is AMAZING for hot days.', planted: [{ ruleId: 'R-TONE-CAPS', contains: 'AMAZING' }, { ruleId: 'R-TONE-HYPE', contains: 'AMAZING' }] },
+  ];
+
+  /* Sample history so the insights page has something to show. Clearly labelled as sample data in the UI. */
+  function seedHistory() {
+    const mk = (id, title, author, status, daysAgo, first, fin, versions) => ({
+      id, title, author, status, sample: true, createdAt: new Date(Date.now() - daysAgo * 86400000).toISOString(),
+      versions: Array.from({ length: versions }, (_, i) => ({ n: i + 1, text: '(sample)', at: new Date(Date.now() - (daysAgo - i) * 86400000).toISOString(), by: author })),
+      firstCheck: first.map((r) => ({ ruleId: r })), final: fin, findings: [], comments: [], events: [{ at: new Date(Date.now() - daysAgo * 86400000).toISOString(), by: author, type: 'sample', note: 'Sample history' }], receipts: [], feedback: [],
+    });
+    const D = (ruleId, status, reason) => ({ ruleId, status, reason });
+    return [
+      mk('SEED-1', 'Summer hydration blog', 'Asha Rao', 'approved', 21, ['T-03', 'R-TONE-EXCL', 'R-CLAIM-1'], [D('R-CLAIM-1', 'disputed', 'Claim comes from the lab report')], 2),
+      mk('SEED-2', 'Marathon sponsor post', 'Ravi Nair', 'approved', 18, ['R-TONE-HYPE', 'R-TONE-EXCL', 'T-02'], [], 2),
+      mk('SEED-3', 'Retailer newsletter', 'Asha Rao', 'approved', 14, ['T-03', 'R-TONE-HYPE', 'R-READ-LEN'], [D('R-READ-LEN', 'disputed', 'Legal sentence must stay whole'), D('R-READ-LEN', 'disputed', 'Needs to stay as one line')], 3),
+      mk('SEED-4', 'Winter promo email', 'Ravi Nair', 'approved', 9, ['T-03', 'R-READ-LEN', 'R-FACT-EXPIRED'], [D('R-READ-LEN', 'disputed', 'Reads fine aloud')], 2),
+      mk('SEED-5', 'Founder interview', 'Asha Rao', 'approved', 6, ['T-03', 'R-TONE-HYPE', 'R-A11Y-ALT'], [], 2),
+      mk('SEED-6', 'Instagram carousel', 'Ravi Nair', 'approved', 3, ['R-A11Y-ALT', 'R-TONE-EXCL', 'R-READ-LEN'], [D('R-A11Y-ALT', 'disputed', 'Decorative image')], 2),
+    ];
+  }
+  return { sources, users, roleNames, samples, evalSet, seedHistory };
+});
+
+/* AI adapter: sends a few redacted sentences plus retrieved rules to a swappable provider, then
+   keeps only findings that cite a real source and quote real text. Also builds the data-out receipt. */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./engine.js'));
+  else root.BSAI = factory(root.BSEngine);
+})(typeof self !== 'undefined' ? self : this, function (E) {
+  'use strict';
+  const CATS = ['tone', 'messaging', 'terminology', 'claim'];
+  const SEVS = ['low', 'medium', 'high'];
+  const MAX_SEGMENTS = 10, MAX_CHARS = 1800;
+
+  function pickSegments(text, localFindings) {
+    const sents = E.splitSentences(text);
+    const covered = (s) => localFindings.some((f) => f.start >= 0 && f.start < s.end && f.end > s.start && f.category !== 'readability');
+    const out = [];
+    let chars = 0;
+    for (const s of sents) {
+      if (E.wordCount(s.text) < 6 || covered(s)) continue;
+      if (out.length >= MAX_SEGMENTS || chars + s.text.length > MAX_CHARS) break;
+      out.push(s); chars += s.text.length;
+    }
+    return out;
+  }
+
+  function buildPrompt(brand, segments, items) {
+    return [
+      'You are a careful brand reviewer for ' + brand + '. Review ONLY the numbered sentences below.',
+      'Report a problem only when it breaks one of the SOURCES. Never invent a source. Copy "quote" exactly from the sentence.',
+      'Each suggestion rewrites only the quoted text and must keep the writer\'s meaning. At most 3 suggestions.',
+      'Return JSON only, in this shape: {"findings":[{"segment":0,"quote":"...","sourceId":"G-1","category":"tone|messaging|terminology|claim","severity":"low|medium|high","title":"short title","explanation":"why, in plain words","confidence":0.0,"suggestions":["..."]}]}',
+      'If nothing is wrong return {"findings":[]}.',
+      '',
+      'SENTENCES:',
+      segments.map((s, i) => i + ': ' + s.text).join('\n'),
+      '',
+      'SOURCES:',
+      items.map((it) => '[' + it.id + '] (' + it.type + ') ' + it.text).join('\n'),
+    ].join('\n');
+  }
+
+  function buildReceipt(r) {
+    const sent = r.sent || [];
+    return {
+      id: 'R' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      at: new Date().toISOString(),
+      mode: r.mode, provider: r.provider || '', reason: r.reason || '',
+      sent, redactions: r.redactions || [], sourceIds: r.sourceIds || [],
+      bytes: sent.reduce((a, s) => a + s.text.length, 0),
+      accepted: r.accepted || 0, blocked: r.blocked || [], error: r.error || '',
+    };
+  }
+
+  /* provider: { name, call(prompt) -> Promise<object> } or null */
+  async function aiReview(opts) {
+    const { text, sources, localFindings, provider, enabled } = opts;
+    if (!enabled) return { findings: [], receipt: buildReceipt({ mode: 'rules-only', reason: 'AI review is switched off by an admin. Nothing left this page.' }) };
+    if (!provider) return { findings: [], receipt: buildReceipt({ mode: 'rules-only', reason: 'No AI provider is available in this view. Nothing left this page.' }) };
+    const segs = pickSegments(text, localFindings);
+    if (!segs.length) return { findings: [], receipt: buildReceipt({ mode: 'rules-only', provider: provider.name, reason: 'Every sentence was already handled by the fixed checks, so nothing was sent.' }) };
+
+    const redactions = [];
+    const sent = segs.map((s, i) => {
+      const r = E.redact(s.text, sources.confidential);
+      r.redactions.forEach((x) => redactions.push(x));
+      return { index: i, text: r.text };
+    });
+    const seen = new Map();
+    sent.forEach((s) => E.retrieve(s.text, sources, 5).forEach((it) => seen.set(it.id, it)));
+    const items = [...seen.values()].slice(0, 12);
+    const sourceIds = items.map((i) => i.id);
+    const prompt = buildPrompt(sources.name || 'the brand', sent, items);
+
+    let raw;
+    try {
+      raw = await provider.call(prompt);
+    } catch (e) {
+      return { findings: [], receipt: buildReceipt({ mode: 'ai-assisted', provider: provider.name, sent, redactions, sourceIds, error: (e && (e.message || e.code)) || 'AI request failed' }) };
+    }
+    const list = raw && Array.isArray(raw.findings) ? raw.findings : [];
+    const blocked = [], findings = [];
+    const valid = new Set(sourceIds);
+    list.forEach((f) => {
+      const seg = segs[f && f.segment];
+      const why = (reason) => blocked.push({ reason, title: (f && f.title) || '(untitled)' });
+      if (!f || !seg) return why('refers to a sentence that was not sent');
+      if (!valid.has(f.sourceId)) return why('cites "' + f.sourceId + '", which is not in the source library');
+      const redSeg = sent[f.segment].text;
+      if (!f.quote || !redSeg.includes(f.quote) || /\[(CONFIDENTIAL|EMAIL|PHONE)\]/.test(f.quote)) return why('quote does not appear in the sentence');
+      const idx = seg.text.indexOf(f.quote);
+      if (idx < 0) return why('quote cannot be located in the original text');
+      const start = seg.start + idx, end = start + f.quote.length;
+      if (opts.localFindings.some((l) => l.start >= 0 && l.start < end && l.end > start && l.category !== 'readability')) return why('already caught by a fixed check');
+      const cat = CATS.includes(f.category) ? f.category : 'messaging';
+      const conf = Math.max(0, Math.min(1, Number(f.confidence)));
+      findings.push({
+        id: 'A' + (findings.length + 1), ruleId: f.sourceId, sourceId: f.sourceId, origin: 'ai', category: cat,
+        severity: SEVS.includes(f.severity) ? f.severity : 'medium', start, end, quote: f.quote,
+        ctxStart: seg.start, ctxEnd: seg.end, title: String(f.title || 'AI-assisted finding').slice(0, 120),
+        explanation: String(f.explanation || '').slice(0, 500), confidence: isNaN(conf) ? 0.5 : conf,
+        fixes: (Array.isArray(f.suggestions) ? f.suggestions : []).slice(0, 3).filter((x) => typeof x === 'string').map((x, i) => ({ id: 'A' + (findings.length + 1) + '-' + (i + 1), label: 'AI suggestion', replacement: x })),
+        status: 'open', sourceLabel: E.sourceLabel(sources, f.sourceId) || f.sourceId, key: f.sourceId + '|' + f.quote.toLowerCase(),
+        keep: E.keepChips(seg.text),
+      });
+    });
+    return { findings, receipt: buildReceipt({ mode: 'ai-assisted', provider: provider.name, sent, redactions, sourceIds, accepted: findings.length, blocked }) };
+  }
+
+  function parseJsonLoose(t) {
+    if (t && typeof t === 'object') return t;
+    let s = String(t || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+    const a = s.indexOf('{'), b = s.lastIndexOf('}');
+    if (a >= 0 && b > a) s = s.slice(a, b + 1);
+    return JSON.parse(s);
+  }
+  /* Works with any OpenAI-compatible chat endpoint (OpenAI, Azure, Ollama, vLLM, LM Studio...). */
+  function openAICompatible(cfg, fetchImpl) {
+    const f = fetchImpl || (typeof fetch !== 'undefined' ? fetch : null);
+    return {
+      name: (cfg.model || 'model') + ' via ' + (function () { try { return new URL(cfg.url).host; } catch (e) { return cfg.url; } })(),
+      call: async (prompt) => {
+        const res = await f(cfg.url, {
+          method: 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, cfg.key ? { Authorization: 'Bearer ' + cfg.key } : {}),
+          body: JSON.stringify({ model: cfg.model, temperature: 0, messages: [{ role: 'user', content: prompt }] }),
+        });
+        if (!res.ok) throw new Error('AI endpoint answered ' + res.status);
+        const j = await res.json();
+        return parseJsonLoose(j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content);
+      },
+    };
+  }
+   /* Sends the (already redacted) prompt to the BrandSentinel server, which holds the API key. */
+  function serverProvider(cfg, fetchImpl) {
+    const f = fetchImpl || (typeof fetch !== 'undefined' ? fetch : null);
+    const base = String(cfg.url || '').replace(/\/+$/, '');
+    return {
+      name: (cfg.model || 'AI model') + ' via BrandSentinel server',
+      call: async (prompt) => {
+        const res = await f(base + '/api/ai-complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
+        if (!res.ok) throw new Error('AI server answered ' + res.status);
+        return await res.json();
+      },
+    };
+  }
+  return { openAICompatible, serverProvider, parseJsonLoose, aiReview, pickSegments, buildPrompt, buildReceipt };
+});
+
+/* Roles, routing and insights. Pure logic, no DOM. */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.BSWorkflow = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+  const STATUS = {
+    draft: 'Draft', awaiting_specialist: 'Waiting for Legal', awaiting_manager: 'Waiting for Brand manager',
+    changes_requested: 'Changes requested', approved: 'Approved',
+  };
+  const PERMS = {
+    writer: ['create', 'submit', 'revise', 'comment'],
+    brand_manager: ['approve', 'request_changes', 'edit_sources', 'edit_facts', 'comment'],
+    legal: ['signoff', 'request_changes', 'edit_facts', 'comment'],
+    admin: ['settings', 'edit_sources', 'edit_facts', 'comment'],
+  };
+  function can(role, action) { return (PERMS[role] || []).includes(action); }
+
+  function openCount(findings) { return findings.filter((f) => f.status === 'open').length; }
+  function needsSpecialist(findings) {
+    return findings.some((f) => f.status !== 'fixed' && f.needsSpecialist);
+  }
+  function validateSubmit(sub, findings) {
+    if (!(findings || []).length && !sub.versions.length) return { ok: false, reason: 'Run a check first.' };
+    const open = openCount(findings);
+    if (open) return { ok: false, reason: open + ' finding' + (open === 1 ? ' is' : 's are') + ' still open. Apply a fix, edit the text, or dispute it with a reason.' };
+    const bad = findings.find((f) => f.status === 'disputed' && !(f.reason || '').trim());
+    if (bad) return { ok: false, reason: 'A disputed finding needs a reason.' };
+    return { ok: true, route: needsSpecialist(findings) || sub.needsLegal ? 'awaiting_specialist' : 'awaiting_manager' };
+  }
+  function transition(sub, role, action) {
+    const s = sub.status;
+    if (action === 'signoff') {
+      if (!can(role, 'signoff')) return { ok: false, reason: 'Only a Legal reviewer can sign off.' };
+      if (s !== 'awaiting_specialist') return { ok: false, reason: 'Nothing is waiting for Legal.' };
+      return { ok: true, to: 'awaiting_manager' };
+    }
+    if (action === 'approve') {
+      if (!can(role, 'approve')) return { ok: false, reason: 'Only a Brand manager can approve.' };
+      if (s === 'awaiting_specialist') return { ok: false, reason: 'Legal must sign off first.' };
+      if (s !== 'awaiting_manager') return { ok: false, reason: 'This piece is not waiting for approval.' };
+      return { ok: true, to: 'approved' };
+    }
+    if (action === 'request_changes') {
+      if (!can(role, 'request_changes')) return { ok: false, reason: 'Your role cannot request changes.' };
+      if (!['awaiting_specialist', 'awaiting_manager'].includes(s)) return { ok: false, reason: 'This piece is not in review.' };
+      return { ok: true, to: 'changes_requested' };
+    }
+    return { ok: false, reason: 'Unknown action.' };
+  }
+
+  function insights(subs, ruleTitle) {
+    ruleTitle = ruleTitle || ((id) => id);
+    const first = {}, disputed = {}, byAuthor = {};
+    let clear = 0, unclear = 0;
+    subs.forEach((s) => {
+      const ruleSet = new Set();
+      (s.firstCheck || []).forEach((f) => { first[f.ruleId] = (first[f.ruleId] || 0) + 1; ruleSet.add(f.ruleId); });
+      ruleSet.forEach((r) => { byAuthor[s.author] = byAuthor[s.author] || {}; byAuthor[s.author][r] = (byAuthor[s.author][r] || 0) + 1; });
+      (s.final || []).forEach((f) => { if (f.status === 'disputed') { disputed[f.ruleId] = disputed[f.ruleId] || { n: 0, reasons: [] }; disputed[f.ruleId].n++; if (f.reason) disputed[f.ruleId].reasons.push(f.reason); } });
+      (s.feedback || []).forEach((f) => { f.clear ? clear++ : unclear++; });
+    });
+    const topRules = Object.entries(first).map(([ruleId, count]) => ({ ruleId, title: ruleTitle(ruleId), count })).sort((a, b) => b.count - a.count);
+    const disputes = Object.entries(first).map(([ruleId, total]) => {
+      const d = disputed[ruleId] || { n: 0, reasons: [] };
+      return { ruleId, title: ruleTitle(ruleId), total, disputed: d.n, rate: d.n / total, reasons: [...new Set(d.reasons)] };
+    }).filter((x) => x.disputed > 0).sort((a, b) => b.rate - a.rate || b.disputed - a.disputed);
+    const unclearRules = disputes.filter((d) => d.rate >= 0.5 && d.total >= 2);
+    const repeats = [];
+    Object.entries(byAuthor).forEach(([author, m]) => Object.entries(m).forEach(([ruleId, n]) => { if (n >= 2) repeats.push({ author, ruleId, title: ruleTitle(ruleId), count: n }); }));
+    repeats.sort((a, b) => b.count - a.count);
+    const total = clear + unclear;
+    return {
+      topRules, disputes, unclearRules, repeats,
+      clarity: { clear, unclear, total, pct: total ? Math.round((100 * clear) / total) : null },
+      totals: { submissions: subs.length, approved: subs.filter((s) => s.status === 'approved').length },
+    };
+  }
+  function diffWords(a, b) {
+    const A = a.split(/(\s+)/).filter(Boolean), B = b.split(/(\s+)/).filter(Boolean);
+    const n = A.length, m = B.length, L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    const out = []; let i = 0, j = 0;
+    const push = (t, type) => { const last = out[out.length - 1]; if (last && last.type === type) last.t += t; else out.push({ t, type }); };
+    while (i < n && j < m) {
+      if (A[i] === B[j]) { push(A[i], 'same'); i++; j++; }
+      else if (L[i + 1][j] >= L[i][j + 1]) push(A[i++], 'del'); else push(B[j++], 'add');
+    }
+    while (i < n) push(A[i++], 'del'); while (j < m) push(B[j++], 'add');
+    return out;
+  }
+  return { diffWords, STATUS, can, validateSubmit, transition, insights, openCount, needsSpecialist };
+});
+
+/* File helpers: .docx text extraction (with image alt text) and dominant colours of an image. */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.BSFiles = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+  function decode(s) {
+    return s.replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d))
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+  }
+  function docxXmlToText(xml) {
+    const out = [];
+    for (const p of xml.split(/<\/w:p>/)) {
+      let line = '';
+      const re = /<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>|<w:tab\s*\/>|<w:br\s*\/>|<wp:docPr\b([^>]*)>/g;
+      let m;
+      while ((m = re.exec(p))) {
+        if (m[1] !== undefined) line += decode(m[1]);
+        else if (m[2] !== undefined) {
+          const d = /\bdescr="([^"]*)"/.exec(m[2]);
+          line += (line ? ' ' : '') + '![' + (d ? decode(d[1]).trim() : '') + '](image) ';
+        } else line += m[0].startsWith('<w:tab') ? '\t' : '\n';
+      }
+      line = line.trim();
+      if (line) out.push(line);
+    }
+    return out.join('\n');
+  }
+  async function readDocx(JSZip, buffer) {
+    const zip = await JSZip.loadAsync(buffer);
+    const f = zip.file('word/document.xml');
+    if (!f) throw new Error('This does not look like a Word (.docx) file.');
+    return docxXmlToText(await f.async('string'));
+  }
+  /* data: RGBA Uint8ClampedArray. Buckets colours coarsely and returns the biggest groups. */
+  function dominantColours(data, topN) {
+    const buckets = new Map(); let total = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 128) continue;
+      const r = data[i] >> 5, g = data[i + 1] >> 5, b = data[i + 2] >> 5, k = (r << 6) | (g << 3) | b;
+      const e = buckets.get(k) || { n: 0, r: 0, g: 0, b: 0 };
+      e.n++; e.r += data[i]; e.g += data[i + 1]; e.b += data[i + 2]; buckets.set(k, e); total++;
+    }
+    const hex = (v) => Math.round(v).toString(16).padStart(2, '0');
+    return [...buckets.values()].sort((a, b) => b.n - a.n).slice(0, topN || 4)
+      .map((e) => ({ hex: ('#' + hex(e.r / e.n) + hex(e.g / e.n) + hex(e.b / e.n)).toUpperCase(), share: total ? e.n / total : 0 }));
+  }
+  return { docxXmlToText, readDocx, dominantColours, decode };
+});
+
+/* BrandSentinel app shell. State lives in the browser (localStorage). Engine, AI adapter and workflow logic are separate, tested modules. */
+(function () {
+  'use strict';
+  const E = window.BSEngine, D = window.BSData, A = window.BSAI, W = window.BSWorkflow, F = window.BSFiles;
+  const KEY = 'brandsentinel.v1';
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmt = (iso) => { try { return new Date(iso).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return iso; } };
+  const uid = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  const CAT = { terminology: 'Terminology', tone: 'Tone', claim: 'Claim', readability: 'Readability', accessibility: 'Accessibility', visual: 'Visual', confidentiality: 'Confidentiality', messaging: 'Messaging' };
+
+  /* ---------- state ---------- */
+  const blankWork = () => ({ subId: null, title: '', text: '', mode: 'text', alt: '', isLogo: false, useContrast: false, fg: '#767676', bg: '#FFFFFF', imageInfo: null, imageUrl: '', findings: [], verified: [], ai: [], receipt: null, checked: false, editing: true, stats: null });
+  let state = load();
+    const API_URL = (typeof window !== 'undefined' && window.BS_API_URL) || 'http://127.0.0.1:8000';
+  let aiTools = { sample: null, server: null, checked: false };
+  let busy = '';
+
+  function fresh() {
+    return { v: 1, userId: 'u-asha', view: 'review', settings: { aiEnabled: true, provider: 'auto', custom: { url: '', model: '', key: '' } }, sources: clone(D.sources), changelog: [], subs: D.seedHistory(), work: blankWork(), ui: {} };
+  }
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) { const s = JSON.parse(raw); if (s && s.v === 1) { s.ui = {}; s.work = Object.assign(blankWork(), s.work || {}); return s; } }
+    } catch (e) { /* storage unavailable: run in memory */ }
+    return fresh();
+  }
+  function save() {
+    try { const s = Object.assign({}, state, { ui: {} }); s.work = Object.assign({}, state.work, { imageUrl: '' }); localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* ignore */ }
+  }
+  const user = () => D.users.find((u) => u.id === state.userId) || D.users[0];
+  const role = () => user().role;
+  const can = (a) => W.can(role(), a);
+  const sub = (id) => state.subs.find((s) => s.id === id);
+  const ruleTitle = (id) => { const s = state.sources; const r = (s.rules || []).find((x) => x.id === id) || (s.terms || []).find((x) => x.id === id); if (!r) return id; return r.title || ('Term: avoid "' + r.avoid + '"'); };
+  function toast(msg) {
+    let t = document.getElementById('toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+    t.textContent = msg; clearTimeout(toast.h); toast.h = setTimeout(() => t.remove(), 3500);
+  }
+  function addEvent(s, type, note) { s.events.push({ at: new Date().toISOString(), by: user().name + ' (' + D.roleNames[role()] + ')', type, note }); }
+
+  /* ---------- AI provider ---------- */
+    async function detectAI() {
+    try { if (window.claude && window.claude.use) aiTools.sample = await window.claude.use('sample'); } catch (e) { aiTools.sample = null; }
+    try {
+      const r = await fetch(API_URL + '/api/health'); const j = await r.json();
+      aiTools.server = j && j.ok && j.ai_configured ? { url: API_URL, model: j.model || 'AI model' } : null;
+    } catch (e) { aiTools.server = null; }
+    aiTools.checked = true; render();
+  }
+  function getProvider() {
+    const c = state.settings.custom;
+    if (state.settings.provider === 'custom' && c.url && c.model) return A.openAICompatible(c);
+    if (state.settings.provider !== 'none' && aiTools.sample) return { name: 'Claude (through your claude.ai session)', call: (p) => aiTools.sample.json(p, { cache: false }) };
+        if (state.settings.provider !== 'none' && aiTools.server) return A.serverProvider(aiTools.server);
+    return null;
+  }
+
+  /* ---------- checking ---------- */
+  function carry(prev, next) {
+    const m = new Map(prev.map((f) => [f.key, f]));
+    next.forEach((f) => {
+      const p = m.get(f.key);
+      const prevChips = (p && p.chips) || [];
+      const was = new Map(prevChips.map((c) => [c.t, c.on]));
+      f.chips = (f.keep || []).map((t) => ({ t, on: was.has(t) ? was.get(t) : true })).concat(prevChips.filter((c) => c.custom));
+      if (p) { f.status = p.status === 'fixed' ? 'open' : p.status; f.reason = p.reason; f.feedback = p.feedback; }
+    });
+  }
+  function relocateAI(text, list) {
+    const out = [];
+    list.forEach((f) => {
+      const i = text.indexOf(f.quote); if (i < 0) return;
+      const s = E.splitSentences(text).find((x) => i >= x.start && i < x.end);
+      out.push(Object.assign({}, f, { start: i, end: i + f.quote.length, ctxStart: s ? s.start : i, ctxEnd: s ? s.end : i + f.quote.length }));
+    });
+    return out;
+  }
+  const sortF = (a, b) => ({ high: 0, medium: 1, low: 2 }[a.severity] - { high: 0, medium: 1, low: 2 }[b.severity]) || a.start - b.start;
+  function ensureSub() {
+    const w = state.work;
+    if (w.subId && sub(w.subId)) return sub(w.subId);
+    const s = { id: 'P-' + String(state.subs.filter((x) => !x.sample).length + 1).padStart(3, '0'), title: w.title || 'Untitled draft', author: user().name, status: 'draft', createdAt: new Date().toISOString(), versions: [], firstCheck: null, final: [], finalFindings: [], comments: [], events: [], receipts: [], feedback: [], fixed: 0 };
+    addEvent(s, 'created', 'Draft created'); state.subs.unshift(s); w.subId = s.id; return s;
+  }
+  function recheckLocal() {
+    const w = state.work;
+    const r = E.reviewText(w.text, state.sources, { now: new Date() });
+    const ai = relocateAI(w.text, w.ai);
+    const all = r.findings.concat(ai).sort(sortF);
+    carry(w.findings, all);
+    w.findings = all; w.ai = ai; w.verified = r.verified; w.stats = r.stats; w.checked = true;
+  }
+  async function runCheck() {
+    const w = state.work;
+    if (!can('create') && !w.subId) return toast('Switch to a Writer to start a review.');
+    if (w.mode === 'image') return runImageCheck();
+    if (!w.text.trim()) return toast('Add some text first.');
+    const s = ensureSub(); if (w.title) s.title = w.title;
+    w.ai = []; w.editing = false;
+    recheckLocal(); busy = 'Fixed checks done. ' + (state.settings.aiEnabled ? 'Asking the AI about the sentences they could not judge…' : ''); render();
+    const res = await A.aiReview({ text: w.text, sources: state.sources, localFindings: w.findings, provider: getProvider(), enabled: state.settings.aiEnabled });
+    w.ai = res.findings; w.receipt = res.receipt; s.receipts.push(res.receipt);
+    const all = E.reviewText(w.text, state.sources, { now: new Date() }).findings.concat(res.findings).sort(sortF);
+    carry(w.findings, all); w.findings = all;
+    if (!s.firstCheck) s.firstCheck = all.map((f) => ({ ruleId: f.ruleId, category: f.category }));
+    addEvent(s, 'check', all.length + ' findings (' + res.receipt.mode + ')');
+    busy = ''; save(); render();
+    if (res.receipt.error) toast('The AI step failed (' + res.receipt.error + '). Fixed checks still ran.');
+  }
+  function afterEdit() {
+    recheckLocal();
+    const s = sub(state.work.subId); if (s && !s.firstCheck) s.firstCheck = state.work.findings.map((f) => ({ ruleId: f.ruleId, category: f.category }));
+    save(); render();
+  }
+  function runImageCheck() {
+    const w = state.work;
+    if (!w.imageInfo) return toast('Choose an image first.');
+    const s = ensureSub(); if (w.title) s.title = w.title;
+    const list = E.checkVisual({ alt: w.alt, fg: w.useContrast ? w.fg : '', bg: w.useContrast ? w.bg : '', dominant: w.imageInfo.dominant, isLogo: w.isLogo, width: w.imageInfo.width }, state.sources);
+    list.forEach((f) => { f.key = f.ruleId + '|' + f.quote.toLowerCase(); f.keep = []; });
+    carry(w.findings, list); w.findings = list; w.ai = []; w.verified = []; w.checked = true; w.editing = false;
+    w.receipt = A.buildReceipt({ mode: 'rules-only', reason: 'Images are analysed inside your browser. Nothing left this page.' });
+    if (!s.firstCheck) s.firstCheck = list.map((f) => ({ ruleId: f.ruleId, category: f.category }));
+    addEvent(s, 'check', list.length + ' findings on image'); save(); render();
+  }
+
+  /* ---------- rendering helpers ---------- */
+  const chipsOn = (f) => (f.chips || []).filter((c) => c.on).map((c) => c.t);
+  function diffHtml(a, b) { return W.diffWords(a, b).map((d) => d.type === 'same' ? esc(d.t) : d.type === 'add' ? '<ins>' + esc(d.t) + '</ins>' : '<del>' + esc(d.t) + '</del>').join(''); }
+
+  function annotated(text, findings) {
+    const marks = findings.filter((f) => f.start >= 0 && f.end > f.start && f.status !== 'fixed').sort((a, b) => a.start - b.start);
+    let html = '', pos = 0;
+    marks.forEach((f) => {
+      if (f.start < pos) return;
+      html += esc(text.slice(pos, f.start)) + '<mark class="' + f.severity + (f.origin === 'ai' ? ' ai' : '') + '" data-a="focus" data-id="' + f.id + '" tabindex="0" title="' + esc(f.title) + '">' + esc(text.slice(f.start, f.end)) + '</mark>';
+      pos = f.end;
+    });
+    return html + esc(text.slice(pos));
+  }
+
+  function findingCard(f, locked) {
+    const ev = f.fixes && f.fixes.length ? E.evaluateFixes(f, state.work.text, chipsOn(f)) : { ok: [], blocked: [] };
+    const disputing = state.ui.disputing === f.id;
+    const badges = [
+      '<span class="pill ' + f.severity + '">' + f.severity + '</span>',
+      '<span class="pill plain">' + (CAT[f.category] || f.category) + '</span>',
+      f.origin === 'ai' ? '<span class="pill ai" title="Suggested by an AI model, checked against a real source">AI-assisted</span>' : '',
+      f.unverified ? '<span class="pill warn">Unverified, needs human review</span>' : '',
+      f.needsSpecialist ? '<span class="pill plain">Goes to Legal</span>' : '',
+      f.status === 'disputed' ? '<span class="pill ok">Disputed</span>' : '',
+    ].join('');
+    let h = '<article class="f ' + f.severity + (f.status === 'disputed' ? ' disputed' : '') + '" id="card-' + f.id + '"><div class="head">' + badges + '</div>';
+    h += '<h4>' + esc(f.title) + '</h4>';
+    if (f.quote) h += '<div class="quote">' + esc(f.quote) + '</div>';
+    h += '<p class="small">' + esc(f.explanation) + '</p>';
+    h += '<p class="small muted">Source: ' + esc(f.sourceLabel) + (f.origin === 'ai' ? ' · confidence ' + Math.round((f.confidence || 0) * 100) + '%' : '') + '</p>';
+    if (f.status === 'disputed') h += '<p class="small"><b>Your reason:</b> ' + esc(f.reason) + '</p>';
+    if (f.fixes && f.fixes.length && f.status !== 'disputed') {
+      h += '<div class="stack" style="gap:8px"><div><b class="small">Meaning check.</b> <span class="small muted">What must this sentence still say? Tap to switch a point off, or add your own.</span></div>';
+      h += '<div class="chips">' + (f.chips || []).map((c, i) => '<button class="chip" aria-pressed="' + c.on + '" data-a="chip" data-id="' + f.id + '" data-i="' + i + '">' + esc(c.t) + '</button>').join('');
+      h += '<input type="text" size="12" placeholder="Add a point" aria-label="Add a point this sentence must keep" id="chip-' + f.id + '" data-bind="chipinput" data-id="' + f.id + '"><button class="btn small" data-a="chipadd" data-id="' + f.id + '">Add</button></div>';
+      ev.ok.forEach((x) => { h += '<div class="fix"><div class="t"><b>' + esc(x.label) + '</b><br>' + diffHtml(x.before, x.after) + '</div><button class="btn small primary" data-a="fix" data-id="' + f.id + '" data-fx="' + x.id + '"' + (locked ? ' disabled' : '') + '>Apply</button></div>'; });
+      if (ev.blocked.length) {
+        h += '<details><summary class="small">' + ev.blocked.length + ' rewrite' + (ev.blocked.length > 1 ? 's' : '') + ' hidden because the meaning check failed</summary>';
+        ev.blocked.forEach((x) => { const why = [].concat(x.check.missing.map((m) => 'drops "' + m + '"'), x.check.added.map((m) => 'adds "' + m + '"')).join(', '); h += '<div class="fix blocked"><div class="t"><b>' + esc(x.label) + '</b><br>' + diffHtml(x.before, x.after) + '<br><span class="pill warn">Blocked: ' + esc(why) + '</span></div></div>'; });
+        h += '</details>';
+      }
+      if (!ev.ok.length) h += '<p class="small muted">No safe rewrite keeps the points above. Edit the text yourself, change the points, or dispute this finding.</p>';
+      h += '</div>';
+    } else if (!f.fixes.length && f.status !== 'disputed') {
+      h += '<p class="small muted">No automatic fix for this one. ' + (state.work.mode === 'image' ? 'Change it, then press Check again.' : 'Edit the text, then press Check again.') + '</p>';
+    }
+    if (disputing) {
+      h += '<label class="f2">Why should this stay as written?<textarea rows="2" id="reason-' + f.id + '" data-bind="reason" data-id="' + f.id + '" placeholder="For example: the lab report supports this figure.">' + esc(state.ui.reasonText || '') + '</textarea></label><div class="row"><button class="btn small primary" data-a="disputesave" data-id="' + f.id + '">Save dispute</button><button class="btn small" data-a="disputecancel">Cancel</button></div>';
+    } else if (!locked) {
+      h += '<div class="row">' + (f.status === 'disputed' ? '<button class="btn small" data-a="undispute" data-id="' + f.id + '">Withdraw dispute</button>' : '<button class="btn small" data-a="dispute" data-id="' + f.id + '">Dispute</button>')
+        + '<span class="grow"></span><span class="small muted">Clear enough to act on?</span>'
+        + '<button class="btn small" data-a="fb" data-id="' + f.id + '" data-v="1" aria-pressed="' + (f.feedback === 1) + '">' + (f.feedback === 1 ? 'Clear ✓' : 'Clear') + '</button>'
+        + '<button class="btn small" data-a="fb" data-id="' + f.id + '" data-v="0" aria-pressed="' + (f.feedback === 0) + '">' + (f.feedback === 0 ? 'Unclear ✓' : 'Unclear') + '</button></div>';
+    }
+    return h + '</article>';
+  }
+
+  function receiptHtml(r) {
+    if (!r) return '';
+    if (r.mode === 'rules-only') return '<div class="receipt"><b>What left our system: nothing.</b><p class="small">' + esc(r.reason) + '</p></div>';
+    let h = '<div class="receipt ai"><b>What left our system</b>';
+    if (r.error) h += '<p class="small"><span class="pill warn">AI step failed</span> ' + esc(r.error) + '. Only the sentences below were prepared; check the AI provider settings.</p>';
+    h += '<p class="small">' + r.sent.length + ' sentence' + (r.sent.length === 1 ? '' : 's') + ' (' + r.bytes + ' characters) went to <b>' + esc(r.provider) + '</b> with ' + r.sourceIds.length + ' retrieved sources. The rest of your draft stayed here.';
+    if (r.redactions.length) h += ' Hidden before sending: ' + r.redactions.map((x) => x.count + ' ' + x.kind + (x.count > 1 ? 's' : '')).join(', ') + '.';
+    h += '</p>';
+    h += '<details><summary class="small">See exactly what was sent</summary>' + r.sent.map((s) => '<div class="sent">' + esc(s.text) + '</div>').join('') + '<p class="small muted" style="margin-top:8px">Sources attached: ' + esc(r.sourceIds.join(', ')) + '</p></details>';
+    if (r.blocked.length) h += '<details><summary class="small">' + r.blocked.length + ' AI suggestion' + (r.blocked.length > 1 ? 's were' : ' was') + ' blocked</summary>' + r.blocked.map((b) => '<div class="sent">' + esc(b.title) + ' — ' + esc(b.reason) + '</div>').join('') + '</details>';
+    return h + '</div>';
+  }
+
+  /* ---------- views ---------- */
+  function reviewView() {
+    const w = state.work, locked = false;
+    const s = w.subId ? sub(w.subId) : null;
+    let h = '<div class="cols"><section class="stack">';
+    h += '<div class="card stack"><div class="row"><h2 class="grow">Check a draft</h2><div class="seg" role="group" aria-label="Content type"><button data-a="mode" data-v="text" aria-pressed="' + (w.mode === 'text') + '">Text</button><button data-a="mode" data-v="image" aria-pressed="' + (w.mode === 'image') + '">Image</button></div></div>';
+    if (!can('create') && !w.subId) h += '<div class="notice warn">You are viewing as <b>' + D.roleNames[role()] + '</b>. Writers start reviews. Switch to a writer at the top, or open a piece from the Queue.</div>';
+    h += '<label class="f2">Title<input type="text" id="title" data-bind="title" value="' + esc(w.title) + '" placeholder="e.g. Autumn launch email"></label>';
+    if (w.mode === 'text') {
+      h += '<div class="row"><label class="f2 grow">Try a sample<select id="sample" data-bind="sample"><option value="">Choose a sample draft…</option>' + D.samples.map((x) => '<option value="' + x.id + '">' + esc(x.label) + '</option>').join('') + '</select></label>'
+        + '<label class="f2">Or upload<input type="file" id="file" data-bind="file" accept=".docx,.txt,.md"></label></div>';
+      if (w.checked && !w.editing) {
+        h += '<div class="doc" id="doc" aria-label="Your draft with findings marked">' + annotated(w.text, w.findings) + '</div><div class="row"><button class="btn" data-a="edit">Edit text</button><span class="small muted">Tap a highlighted phrase to jump to its finding.</span></div>';
+      } else {
+        h += '<textarea id="text" rows="12" data-bind="text" placeholder="Paste your draft here, or choose a sample above.">' + esc(w.text) + '</textarea>';
+      }
+    } else {
+      h += '<div class="drop"><label class="f2">Image file (PNG, JPG, SVG, WebP)<input type="file" id="img" data-bind="img" accept="image/*"></label></div>';
+      if (w.imageUrl) h += '<img class="imgprev" src="' + esc(w.imageUrl) + '" alt="Preview of the uploaded image">';
+      else if (w.imageInfo) h += '<p class="small muted">Image analysed earlier. Upload it again to see the preview.</p>';
+      if (w.imageInfo) {
+        h += '<p class="small">' + w.imageInfo.width + ' × ' + w.imageInfo.height + ' px. Main colours: ' + w.imageInfo.dominant.map((d) => '<span class="swatch" style="background:' + esc(d.hex) + '"></span> <span class="mono">' + esc(d.hex) + '</span> ' + Math.round(d.share * 100) + '%').join(' · ') + '</p>';
+        h += '<label class="f2">Alt text <span class="hint">what a screen reader should say</span><textarea id="alt" rows="2" data-bind="alt">' + esc(w.alt) + '</textarea></label>';
+        h += '<label class="row small"><input type="checkbox" id="islogo" data-bind="islogo"' + (w.isLogo ? ' checked' : '') + '> This is a logo</label>';
+        h += '<div class="row small"><label class="row"><input type="checkbox" id="usecontrast" data-bind="usecontrast"' + (w.useContrast ? ' checked' : '') + '> Text sits on this image or background:</label>'
+          + '<label class="row">text <input type="color" id="fg" data-bind="fg" value="' + esc(w.fg) + '"></label><label class="row">background <input type="color" id="bg" data-bind="bg" value="' + esc(w.bg) + '"></label></div>';
+      }
+    }
+    h += '<div class="row"><button class="btn primary" data-a="check"' + (busy ? ' disabled' : '') + '>' + (w.checked ? 'Check again' : 'Run check') + '</button>'
+      + (w.checked ? '<button class="btn" data-a="newreview">Start over</button>' : '') + '<span class="small muted" aria-live="polite">' + esc(busy) + '</span></div>';
+    h += '</div>';
+    if (w.checked && w.verified.length) {
+      h += '<div class="card stack"><h3>Claims backed by approved facts</h3>' + w.verified.map((v) => '<div class="verified"><span class="pill ok">Verified</span><span>' + esc(v.sentence) + ' <span class="muted small">(' + esc(v.factId) + (v.until ? ', valid until ' + esc(v.until) : '') + ')</span></span></div>').join('') + '</div>';
+    }
+    h += '</section><section class="stack">';
+    if (!w.checked) {
+      h += '<div class="card stack"><h3>How a review works</h3><ol class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px"><li>Pick a sample draft (or paste your own) and press <b>Run check</b>.</li><li>Fixed rules run first, then the AI judges the rest. Every finding shows its source.</li><li>Apply a fix, or dispute it with a reason. Rewrites that change your meaning are blocked.</li><li>Submit. Legal and the Brand manager review in the Queue, and every step is logged.</li></ol><p class="small muted">You can switch role at the top to play the reviewer. Nothing here is sent anywhere unless the receipt says so.</p></div>';
+    } else {
+      const c = { high: 0, medium: 0, low: 0 }; w.findings.forEach((f) => { c[f.severity]++; });
+      const open = W.openCount(w.findings);
+      h += '<div class="card stack"><div class="sum"><h3 class="grow">' + (w.findings.length ? w.findings.length + ' finding' + (w.findings.length === 1 ? '' : 's') : 'No findings') + '</h3>'
+        + '<span class="pill high">' + c.high + ' high</span><span class="pill medium">' + c.medium + ' medium</span><span class="pill low">' + c.low + ' low</span></div>'
+        + (w.stats ? '<p class="small muted">' + w.stats.words + ' words · reading level grade ' + w.stats.grade.toFixed(1) + (s && s.fixed ? ' · ' + s.fixed + ' fix' + (s.fixed > 1 ? 'es' : '') + ' applied' : '') + '</p>' : '')
+        + receiptHtml(w.receipt) + '</div>';
+      w.findings.forEach((f) => { h += findingCard(f, locked); });
+      if (!w.findings.length) h += '<div class="notice">Nothing to fix. Submit it for approval below.</div>';
+      const v = W.validateSubmit(s || { versions: [] }, w.findings);
+      h += '<div class="card stack"><h3>Submit for approval</h3><p class="small">' + (open ? open + ' open finding' + (open > 1 ? 's' : '') + '. Apply a fix, edit the text, or dispute with a reason first.' : (v.ok ? (v.route === 'awaiting_specialist' ? 'This goes to Legal first because it still contains claims they must sign off, then to the Brand manager.' : 'This goes straight to the Brand manager.') : esc(v.reason))) + '</p><div class="row"><button class="btn primary" data-a="submit"' + (!can('submit') || !v.ok ? ' disabled' : '') + '>Submit for approval</button>' + (!can('submit') ? '<span class="small muted">Only writers can submit.</span>' : '') + '</div></div>';
+    }
+    return h + '</section></div>';
+  }
+
+  function queueView() {
+    const open = state.ui.open ? sub(state.ui.open) : null;
+    if (open) return subDetail(open);
+    const rows = state.subs.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    let h = '<div class="stack"><div class="row"><h2 class="grow">Review queue</h2></div>';
+    const mine = rows.filter((s) => (role() === 'legal' && s.status === 'awaiting_specialist') || (role() === 'brand_manager' && s.status === 'awaiting_manager') || (role() === 'writer' && s.author === user().name && ['draft', 'changes_requested'].includes(s.status)));
+    if (mine.length) h += '<div class="notice"><b>' + mine.length + ' item' + (mine.length > 1 ? 's' : '') + ' waiting for you</b> as ' + D.roleNames[role()] + ': ' + mine.map((s) => '<a href="#" data-a="open" data-id="' + s.id + '">' + esc(s.title) + '</a>').join(', ') + '</div>';
+    h += '<div class="card tablewrap"><table><thead><tr><th>Piece</th><th>Author</th><th>Status</th><th>Version</th><th>Created</th></tr></thead><tbody>';
+    rows.forEach((s) => { h += '<tr class="click" data-a="open" data-id="' + s.id + '"><td><b>' + esc(s.title) + '</b>' + (s.sample ? ' <span class="pill plain">sample history</span>' : '') + '<br><span class="mono muted">' + esc(s.id) + '</span></td><td>' + esc(s.author) + '</td><td><span class="pill ' + (s.status === 'approved' ? 'ok' : s.status === 'changes_requested' ? 'warn' : 'plain') + '">' + esc(W.STATUS[s.status]) + '</span></td><td>v' + (s.versions.length || 0) + '</td><td class="small">' + fmt(s.createdAt) + '</td></tr>'; });
+    return h + '</tbody></table></div></div>';
+  }
+  function subDetail(s) {
+    const vsel = state.ui.ver || s.versions.length;
+    const ver = s.versions.find((v) => v.n === vsel) || s.versions[s.versions.length - 1];
+    const prev = s.versions.find((v) => v.n === (ver ? ver.n - 1 : 0));
+    let h = '<div class="stack"><div class="row"><button class="btn" data-a="close">← Queue</button><h2 class="grow">' + esc(s.title) + '</h2><span class="pill ' + (s.status === 'approved' ? 'ok' : 'plain') + '">' + esc(W.STATUS[s.status]) + '</span></div>';
+    h += '<p class="small muted">' + esc(s.id) + ' · by ' + esc(s.author) + (s.sample ? ' · sample history, text not stored' : '') + '</p><div class="cols"><section class="stack">';
+    h += '<div class="card stack"><div class="row"><h3 class="grow">Version history</h3>' + s.versions.map((v) => '<button class="btn small' + (ver && v.n === ver.n ? ' primary' : '') + '" data-a="ver" data-v="' + v.n + '">v' + v.n + '</button>').join('') + '</div>';
+    if (ver && !s.sample) {
+      h += '<p class="small muted">v' + ver.n + ' · ' + fmt(ver.at) + ' · ' + esc(ver.by) + (ver.note ? ' · ' + esc(ver.note) : '') + '</p>';
+      h += '<div class="doc">' + (prev ? diffHtml(prev.text, ver.text) : esc(ver.text)) + '</div>' + (prev ? '<p class="small muted">Changes since v' + prev.n + ' are marked.</p>' : '');
+    } else h += '<p class="small muted">Version text is not stored for sample history.</p>';
+    h += '</div>';
+    if (s.finalFindings && s.finalFindings.length) {
+      h += '<div class="card stack"><h3>Findings at submission</h3>' + s.finalFindings.map((f) => '<div class="small"><span class="pill ' + f.severity + '">' + f.severity + '</span> ' + esc(f.title) + (f.status === 'disputed' ? ' <span class="pill ok">disputed</span><br><span class="muted">Reason: ' + esc(f.reason) + '</span>' : ' <span class="pill plain">' + esc(f.status) + '</span>') + '</div>').join('') + '</div>';
+    }
+    if (s.receipts && s.receipts.length) h += '<div class="card stack"><h3>What left our system</h3>' + receiptHtml(s.receipts[s.receipts.length - 1]) + '</div>';
+    h += '</section><section class="stack"><div class="card stack"><h3>Decision</h3>';
+    const act = [];
+    if (s.status === 'awaiting_specialist') act.push(['signoff', 'Sign off claims', can('signoff')]);
+    if (s.status === 'awaiting_manager') act.push(['approve', 'Approve', can('approve')]);
+    if (['awaiting_specialist', 'awaiting_manager'].includes(s.status)) act.push(['request_changes', 'Request changes', can('request_changes')]);
+    if (!act.length) h += '<p class="small muted">' + (s.status === 'approved' ? 'Approved. The decision is recorded in the history below.' : s.status === 'changes_requested' ? 'The writer needs to revise and resubmit.' : 'Not in review yet.') + '</p>';
+    else {
+      h += '<label class="f2">Comment <span class="hint">required when requesting changes</span><textarea id="decision" rows="2" data-bind="decision">' + esc(state.ui.decisionText || '') + '</textarea></label><div class="row">' + act.map((a) => '<button class="btn' + (a[0] === 'request_changes' ? '' : ' primary') + '" data-a="' + a[0] + '" data-id="' + s.id + '"' + (a[2] ? '' : ' disabled title="Your role cannot do this"') + '>' + a[1] + '</button>').join('') + '</div>';
+      if (!act.some((a) => a[2])) h += '<p class="small muted">You are viewing as ' + D.roleNames[role()] + '. Switch role at the top to act on this piece.</p>';
+    }
+    if (['draft', 'changes_requested'].includes(s.status) && !s.sample && can('revise')) h += '<button class="btn" data-a="revise" data-id="' + s.id + '">Open in editor</button>';
+    h += '</div><div class="card stack"><h3>Comments</h3>' + (s.comments.length ? s.comments.map((c) => '<div class="small"><b>' + esc(c.by) + '</b> <span class="muted">' + fmt(c.at) + '</span><br>' + esc(c.text) + '</div>').join('') : '<p class="small muted">No comments yet.</p>')
+      + '<label class="f2">Add a comment<textarea id="comment" rows="2" data-bind="comment">' + esc(state.ui.commentText || '') + '</textarea></label><button class="btn small" data-a="comment" data-id="' + s.id + '">Post comment</button></div>';
+    h += '<div class="card stack"><h3>History</h3><ul class="timeline">' + s.events.slice().reverse().map((e) => '<li><b>' + esc(e.type) + '</b> · ' + esc(e.note) + '<br><span class="muted small">' + esc(e.by) + ' · ' + fmt(e.at) + '</span></li>').join('') + '</ul></div></section></div></div>';
+    return h;
+  }
+
+  function sourcesView() {
+    const S = state.sources, tab = state.ui.srcTab || 'facts';
+    const canSrc = can('edit_sources'), canFact = can('edit_facts');
+    const tabs = [['facts', 'Facts'], ['terms', 'Terms'], ['rules', 'Rules'], ['palette', 'Colours'], ['conf', 'Confidential']];
+    let h = '<div class="stack"><div class="row"><h2 class="grow">Source library</h2><span class="pill plain">' + esc(S.name) + ' · version ' + S.version + '</span></div>';
+    h += '<p class="small muted">Everything the checker says must trace back to something here. Brand managers edit rules, terms and colours; Brand managers and Legal edit facts. Each change raises the version and is logged.</p>';
+    h += '<div class="seg" role="group" aria-label="Library section">' + tabs.map((t) => '<button data-a="srctab" data-v="' + t[0] + '" aria-pressed="' + (tab === t[0]) + '">' + t[1] + '</button>').join('') + '</div><div class="card stack">';
+    if (tab === 'facts') {
+      h += '<p class="small">Each fact has a <b>valid until</b> date. Past that date, any draft that relies on it is flagged as outdated.</p><div class="tablewrap"><table><thead><tr><th>ID</th><th>Approved fact</th><th>Valid until</th><th>Status</th><th></th></tr></thead><tbody>';
+      S.facts.forEach((f) => { const st = E.factStatus(f, new Date()); h += '<tr><td class="mono">' + esc(f.id) + '</td><td>' + esc(f.text) + '<br><span class="small muted">Evidence: ' + esc(f.evidence || 'none recorded') + '</span></td><td>' + (canFact ? '<input type="date" data-bind="factdate" data-id="' + f.id + '" value="' + esc(f.validUntil || '') + '" aria-label="Valid until for ' + esc(f.id) + '">' : esc(f.validUntil || 'no end date')) + '</td><td><span class="pill ' + (st.state === 'expired' ? 'high' : st.state === 'expiring' ? 'warn' : 'ok') + '">' + (st.state === 'expired' ? 'Expired' : st.state === 'expiring' ? 'Expires in ' + st.days + ' days' : 'In date') + '</span></td><td>' + (canFact ? '<button class="btn small danger" data-a="del" data-t="facts" data-id="' + f.id + '">Delete</button>' : '') + '</td></tr>'; });
+      h += '</tbody></table></div>';
+      if (canFact) h += '<form class="stack" data-form="fact"><h4>Add a fact</h4><div class="row"><input type="text" id="nf-text" class="grow" placeholder="e.g. Tidewell is carbon neutral." required><input type="text" id="nf-ev" placeholder="Evidence (document or link)"><label class="row small">Valid until <input type="date" id="nf-until"></label><button class="btn primary" type="submit">Add fact</button></div></form>';
+    } else if (tab === 'terms') {
+      h += '<div class="tablewrap"><table><thead><tr><th>ID</th><th>Avoid</th><th>Use instead</th><th>Why</th><th></th></tr></thead><tbody>';
+      S.terms.forEach((t) => { h += '<tr><td class="mono">' + esc(t.id) + '</td><td><b>' + esc(t.avoid) + '</b></td><td>' + esc(t.prefer || '(remove)') + '</td><td class="small">' + esc(t.reason) + '</td><td>' + (canSrc ? '<button class="btn small" data-a="toggle" data-t="terms" data-id="' + t.id + '">' + (t.enabled === false ? 'Enable' : 'Disable') + '</button> <button class="btn small danger" data-a="del" data-t="terms" data-id="' + t.id + '">Delete</button>' : (t.enabled === false ? '<span class="pill plain">off</span>' : '')) + '</td></tr>'; });
+      h += '</tbody></table></div>';
+      if (canSrc) h += '<form class="stack" data-form="term"><h4>Add a term</h4><div class="row"><input type="text" id="nt-avoid" placeholder="Avoid" required><input type="text" id="nt-prefer" placeholder="Use instead"><input type="text" id="nt-why" class="grow" placeholder="Why" required><button class="btn primary" type="submit">Add term</button></div></form>';
+    } else if (tab === 'rules') {
+      h += '<div class="tablewrap"><table><thead><tr><th>ID</th><th>Rule</th><th>Source</th><th></th></tr></thead><tbody>';
+      S.rules.forEach((r) => { h += '<tr><td class="mono">' + esc(r.id) + '</td><td><b>' + esc(r.title) + '</b><br><span class="small">' + esc(r.text) + '</span></td><td class="small">' + esc(r.source) + '</td><td>' + (canSrc && !['R-FACT-EXPIRED', 'R-FACT-EXPIRING', 'R-CLAIM-REG'].includes(r.id) ? '<button class="btn small" data-a="toggle" data-t="rules" data-id="' + r.id + '">' + (r.enabled === false ? 'Enable' : 'Disable') + '</button>' : (r.enabled === false ? '<span class="pill plain">off</span>' : '')) + '</td></tr>'; });
+      h += '</tbody></table></div>';
+    } else if (tab === 'palette') {
+      h += '<div class="stack">' + S.palette.map((p) => '<div class="row"><span class="swatch" style="background:' + esc(p.hex) + '"></span><b>' + esc(p.name) + '</b><span class="mono muted">' + esc(p.hex) + '</span>' + (canSrc ? '<button class="btn small danger" data-a="del" data-t="palette" data-id="' + esc(p.hex) + '">Delete</button>' : '') + '</div>').join('') + '</div>';
+      if (canSrc) h += '<form class="stack" data-form="colour"><h4>Add a colour</h4><div class="row"><input type="text" id="nc-name" placeholder="Name" required><input type="color" id="nc-hex" value="#0F766E" aria-label="Colour"><button class="btn primary" type="submit">Add colour</button></div></form>';
+    } else {
+      h += '<p class="small">These names must never appear in public copy, and are removed before any text is sent to an AI service.</p><div class="stack">' + S.confidential.map((c, i) => '<div class="row"><b class="grow">' + esc(c) + '</b>' + (canSrc ? '<button class="btn small danger" data-a="delconf" data-i="' + i + '">Delete</button>' : '') + '</div>').join('') + '</div>';
+      if (canSrc) h += '<form class="stack" data-form="conf"><div class="row"><input type="text" id="ncf" class="grow" placeholder="e.g. Project Orca" required><button class="btn primary" type="submit">Add</button></div></form>';
+    }
+    if (!(canSrc || canFact)) h += '<p class="small muted">You are viewing as ' + D.roleNames[role()] + '. Switch to Brand manager, Legal reviewer or Admin to edit.</p>';
+    h += '</div><div class="card stack"><h3>Change log</h3>' + (state.changelog.length ? '<ul class="timeline">' + state.changelog.slice().reverse().map((c) => '<li>v' + c.v + ' · ' + esc(c.what) + '<br><span class="muted small">' + esc(c.by) + ' · ' + fmt(c.at) + '</span></li>').join('') + '</ul>' : '<p class="small muted">No changes yet. Edit something above to see it logged here.</p>') + '</div></div>';
+    return h;
+  }
+
+  function barRows(list, key, valFn, max, warn) {
+    return list.map((x) => '<div class="bar-row"><span title="' + esc(x.ruleId) + '">' + esc(x.title) + '</span><span class="track"><span class="fill' + (warn ? ' warn' : '') + '" style="display:block;width:' + Math.round((100 * valFn(x)) / max) + '%"></span></span><span class="v">' + (warn ? Math.round(x.rate * 100) + '%' : x.count) + '</span></div>').join('');
+  }
+  function insightsView() {
+    const I = W.insights(state.subs, ruleTitle);
+    const real = state.subs.filter((s) => !s.sample).length;
+    let h = '<div class="stack"><div class="row"><h2 class="grow">Insights</h2></div><div class="notice small">Includes ' + state.subs.filter((s) => s.sample).length + ' pieces of <b>sample history</b> so this page is not empty. Your own reviews (' + real + ') are added as you submit and triage.</div>';
+    h += '<div class="grid2"><div class="card stat"><span class="small muted">Pieces reviewed</span><b>' + I.totals.submissions + '</b></div><div class="card stat"><span class="small muted">Approved</span><b>' + I.totals.approved + '</b></div><div class="card stat"><span class="small muted">Findings rated clear</span><b>' + (I.clarity.pct == null ? '–' : I.clarity.pct + '%') + '</b><span class="small muted">' + (I.clarity.total ? I.clarity.total + ' ratings from testers' : 'Use Clear / Unclear on findings to fill this in') + '</span></div></div>';
+    h += '<div class="grid2"><div class="card stack"><h3>Most broken rules</h3><p class="small muted">Findings on first check, across all pieces.</p>' + (I.topRules.length ? barRows(I.topRules.slice(0, 8), 'count', (x) => x.count, I.topRules[0].count) : '<p class="small muted">No data yet.</p>') + '</div>';
+    h += '<div class="card stack"><h3>Most disputed rules</h3><p class="small muted">Share of findings writers disputed.</p>' + (I.disputes.length ? barRows(I.disputes.slice(0, 8), 'rate', (x) => x.rate, 1, true) : '<p class="small muted">Nothing disputed yet.</p>') + '</div></div>';
+    h += '<div class="card stack"><h3>Guidelines that may be unclear</h3>' + (I.unclearRules.length ? I.unclearRules.map((u) => '<div><b>' + esc(u.title) + '</b> <span class="pill warn">' + u.disputed + ' of ' + u.total + ' disputed</span><p class="small muted">Writers said: ' + esc(u.reasons.join('; ')) + '</p><p class="small">Suggestion: add an example of an allowed exception to this rule, or change its limit.</p></div>').join('') : '<p class="small muted">No rule has been disputed in at least half of its uses (with 2 or more uses).</p>') + '</div>';
+    h += '<div class="card stack"><h3>Mistakes people repeat</h3>' + (I.repeats.length ? '<div class="tablewrap"><table><thead><tr><th>Writer</th><th>Rule</th><th>Pieces</th></tr></thead><tbody>' + I.repeats.slice(0, 8).map((r) => '<tr><td>' + esc(r.author) + '</td><td>' + esc(r.title) + '</td><td>' + r.count + '</td></tr>').join('') + '</tbody></table></div><p class="small muted">Use this for a short refresher, not for blame.</p>' : '<p class="small muted">Nobody has hit the same rule in two pieces yet.</p>') + '</div></div>';
+    return h;
+  }
+
+  function trustView() {
+    const S = state.settings, ev = state.ui.evalResult, prov = getProvider();
+    let h = '<div class="stack"><h2>Trust and AI use</h2><div class="grid2"><div class="card stack"><h3>AI review</h3>';
+    h += '<p class="small">Status: <b>' + (!S.aiEnabled ? 'switched off' : prov ? 'ready (' + esc(prov.name) + ')' : aiTools.checked ? 'no AI provider in this view; fixed checks only' : 'checking…') + '</b></p>';
+    h += '<label class="row"><input type="checkbox" id="aitoggle" data-bind="aitoggle"' + (S.aiEnabled ? ' checked' : '') + (can('settings') ? '' : ' disabled') + '> Let the AI judge sentences the fixed rules cannot</label>' + (can('settings') ? '' : '<p class="small muted">Only an Admin can change this. Switch role at the top.</p>');
+    h += '<label class="f2">Provider<select id="prov" data-bind="prov"' + (can('settings') ? '' : ' disabled') + '><option value="auto"' + (S.provider === 'auto' ? ' selected' : '') + '>Automatic (Claude inside claude.ai, otherwise the BrandSentinel server)</option><option value="custom"' + (S.provider === 'custom' ? ' selected' : '') + '>My own OpenAI-compatible endpoint</option><option value="none"' + (S.provider === 'none' ? ' selected' : '') + '>None (fixed checks only)</option></select></label>';
+    if (S.provider === 'custom') h += '<div class="stack"><input type="url" id="cu" data-bind="cu" placeholder="https://…/v1/chat/completions" value="' + esc(S.custom.url) + '"><input type="text" id="cm" data-bind="cm" placeholder="Model name" value="' + esc(S.custom.model) + '"><input type="password" id="ck" data-bind="ck" placeholder="API key (stays in this browser)" value="' + esc(S.custom.key) + '"><p class="small muted">The browser calls your endpoint directly, so it must allow cross-origin requests. A server-side proxy is planned for Round 3.</p></div>';
+    h += '</div><div class="card stack"><h3>What we promise</h3><ul class="small" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px"><li>Fixed rule checks, claim matching and image checks run in your browser. They send nothing anywhere.</li><li>The AI sees only sentences the fixed rules could not judge, never the whole draft, with confidential names, emails and phone numbers hidden first.</li><li>Every finding must cite a real source in the library and quote real text. Anything else is blocked and counted in the receipt.</li><li>Findings from the AI carry an <span class="pill ai">AI-assisted</span> label. Unsupported claims say <span class="pill warn">Unverified, needs human review</span>.</li><li>People decide. Nothing is approved without a Brand manager, and risky claims need Legal.</li></ul></div></div>';
+    h += '<div class="card stack"><h3>Test the checker</h3><p class="small">Runs the fixed checks on ' + D.evalSet.length + ' short drafts the team wrote, with ' + D.evalSet.reduce((a, c) => a + c.planted.length, 0) + ' planted mistakes and 2 clean drafts. It runs against the current library, so editing a rule or letting a fact lapse can change the result. This is our own test set: treat the numbers as a regression check, not as proof of real-world accuracy.</p><div class="row"><button class="btn primary" data-a="runeval">Run test set</button></div>';
+    if (ev) h += '<div class="grid2"><div class="stat"><span class="small muted">Planted mistakes caught</span><b>' + ev.caught + ' of ' + ev.planted + ' (' + Math.round(ev.recall * 100) + '%)</b></div><div class="stat"><span class="small muted">Findings that were real</span><b>' + Math.round(ev.precision * 100) + '%</b><span class="small muted">' + ev.falsePos.length + ' false alarm' + (ev.falsePos.length === 1 ? '' : 's') + '</span></div></div>' + (ev.misses.length ? '<p class="small">Missed: ' + ev.misses.map((m) => esc(m.case + ' ' + m.ruleId)).join(', ') + '</p>' : '');
+    h += '</div>';
+    const rc = state.subs.flatMap((s) => (s.receipts || []).map((r) => Object.assign({ piece: s.title }, r))).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 8);
+    h += '<div class="card stack"><h3>AI-use log</h3><p class="small muted">Every check run, with what left this page.</p>' + (rc.length ? '<div class="tablewrap"><table><thead><tr><th>When</th><th>Piece</th><th>Mode</th><th>Sentences sent</th></tr></thead><tbody>' + rc.map((r) => '<tr><td class="small">' + fmt(r.at) + '</td><td>' + esc(r.piece) + '</td><td>' + (r.mode === 'ai-assisted' ? '<span class="pill ai">AI-assisted</span>' : '<span class="pill ok">Nothing sent</span>') + '</td><td>' + r.sent.length + ' (' + r.bytes + ' chars)</td></tr>').join('') + '</tbody></table></div>' : '<p class="small muted">No checks run yet.</p>') + '</div>';
+    h += '<div class="card stack flat"><h3>Demo data</h3><p class="small">Everything on this page is saved in your browser only. The Tidewell brand is made up. <button class="btn small danger" data-a="reset">Reset demo data</button></p></div></div>';
+    return h;
+  }
+
+  function render() {
+    const y = window.scrollY, app = document.getElementById('app'); if (!app) return;
+    const waiting = state.subs.filter((s) => (role() === 'legal' && s.status === 'awaiting_specialist') || (role() === 'brand_manager' && s.status === 'awaiting_manager')).length;
+    const tabs = [['review', 'Review'], ['queue', 'Queue'], ['sources', 'Source library'], ['insights', 'Insights'], ['trust', 'Trust and AI']];
+    let h = '<header class="bar"><div class="wrap"><div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3l11 4v8c0 7-4.5 12-11 14C9.500 27 5 22 5 15V7z" fill="var(--ink)"/><path d="M11 16l4 4 7-8" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>BrandSentinel</div>'
+      + '<div class="who"><label for="user">Viewing as</label><select id="user" data-bind="user">' + D.users.map((u) => '<option value="' + u.id + '"' + (u.id === state.userId ? ' selected' : '') + '>' + esc(u.name) + ' · ' + D.roleNames[u.role] + '</option>').join('') + '</select><button class="btn small" data-a="theme" aria-label="Switch light and dark theme">Theme</button></div></div>'
+      + '<div class="wrap tabs" role="tablist">' + tabs.map((t) => '<button class="tab" ' + (state.view === t[0] ? 'aria-current="page"' : '') + ' data-a="nav" data-v="' + t[0] + '">' + t[1] + (t[0] === 'queue' && waiting ? '<span class="n">' + waiting + '</span>' : '') + '</button>').join('') + '</div></header><main class="wrap">';
+    h += state.view === 'review' ? reviewView() : state.view === 'queue' ? queueView() : state.view === 'sources' ? sourcesView() : state.view === 'insights' ? insightsView() : trustView();
+    app.innerHTML = h + '</main>'; window.scrollTo(0, y);
+  }
+
+  /* ---------- actions ---------- */
+  const find = (id) => state.work.findings.find((f) => f.id === id);
+  function bump(what) { state.sources.version++; state.changelog.push({ v: state.sources.version, what, by: user().name, at: new Date().toISOString() }); save(); render(); }
+  const actions = {
+    nav(el) { state.view = el.dataset.v; state.ui.open = null; save(); render(); },
+    theme() { const r = document.documentElement; const dark = r.getAttribute('data-theme') === 'dark' || (!r.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches); r.setAttribute('data-theme', dark ? 'light' : 'dark'); },
+    mode(el) { state.work.mode = el.dataset.v; state.work.checked = false; state.work.findings = []; state.work.editing = true; render(); },
+    edit() { state.work.editing = true; render(); setTimeout(() => { const t = document.getElementById('text'); if (t) t.focus(); }, 0); },
+    check() { return runCheck(); },
+    newreview() { state.work = blankWork(); save(); render(); },
+    focus(el) { const c = document.getElementById('card-' + el.dataset.id); if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); c.classList.add('flash'); setTimeout(() => c.classList.remove('flash'), 1400); } },
+    chip(el) { const f = find(el.dataset.id); const c = f.chips[+el.dataset.i]; c.on = !c.on; save(); render(); },
+    chipadd(el) { const f = find(el.dataset.id); const i = document.getElementById('chip-' + f.id); const v = (i.value || '').trim(); if (!v) return; f.chips.push({ t: v, on: true, custom: true }); save(); render(); },
+    fix(el) {
+      const f = find(el.dataset.id); const w = state.work;
+      const ev = E.evaluateFixes(f, w.text, chipsOn(f)); const fx = ev.ok.find((x) => x.id === el.dataset.fx); if (!fx) return toast('That rewrite no longer passes the meaning check.');
+      w.text = E.applyFix(w.text, f, fx); const s = sub(w.subId); s.fixed = (s.fixed || 0) + 1; addEvent(s, 'fix applied', f.title);
+      if (f.unverified) { s.needsLegal = true; addEvent(s, 'legal flag', 'An unverified claim was reworded, so Legal must still sign it off'); }
+      afterEdit(); toast('Fix applied and draft re-checked.');
+    },
+    dispute(el) { state.ui.disputing = el.dataset.id; state.ui.reasonText = ''; render(); const t = document.getElementById('reason-' + el.dataset.id); if (t) t.focus(); },
+    disputecancel() { state.ui.disputing = null; render(); },
+    disputesave(el) { const f = find(el.dataset.id); const r = (state.ui.reasonText || '').trim(); if (!r) return toast('Add a reason so the reviewer understands.'); f.status = 'disputed'; f.reason = r; state.ui.disputing = null; addEvent(sub(state.work.subId), 'disputed', f.title + ': ' + r); save(); render(); },
+    undispute(el) { const f = find(el.dataset.id); f.status = 'open'; f.reason = ''; save(); render(); },
+    fb(el) {
+      const f = find(el.dataset.id); const v = +el.dataset.v; const s = sub(state.work.subId); if (!s) return;
+      s.feedback = s.feedback.filter((x) => x.findingKey !== f.key); f.feedback = v; s.feedback.push({ findingKey: f.key, ruleId: f.ruleId, clear: v === 1 }); save(); render();
+    },
+    submit() {
+      const w = state.work, s = sub(w.subId); const v = W.validateSubmit(s, w.findings); if (!v.ok) return toast(v.reason);
+      if (w.mode === 'image') { toast('Image submissions are tracked with the checks only in this version.'); }
+      s.versions.push({ n: s.versions.length + 1, text: w.mode === 'image' ? '[Image] ' + (w.alt || 'no alt text') : w.text, at: new Date().toISOString(), by: user().name, note: s.status === 'changes_requested' ? 'Revised after changes were requested' : '' });
+      s.finalFindings = w.findings.map((f) => ({ ruleId: f.ruleId, title: f.title, severity: f.severity, status: f.status, reason: f.reason || '', quote: f.quote, origin: f.origin }));
+      s.final = w.findings.map((f) => ({ ruleId: f.ruleId, status: f.status, reason: f.reason || '' }));
+      s.status = v.route; addEvent(s, 'submitted', 'v' + s.versions.length + ' sent to ' + (v.route === 'awaiting_specialist' ? 'Legal' : 'Brand manager'));
+      state.work = blankWork(); state.view = 'queue'; state.ui.open = s.id; state.ui.ver = null; save(); render(); toast('Submitted. It is now in the Queue.');
+    },
+    open(el) { state.ui.open = el.dataset.id; state.ui.ver = null; state.ui.decisionText = ''; render(); },
+    close() { state.ui.open = null; render(); },
+    ver(el) { state.ui.ver = +el.dataset.v; render(); },
+    comment(el) { const t = (state.ui.commentText || '').trim(); if (!t) return; const s = sub(el.dataset.id); s.comments.push({ by: user().name + ' (' + D.roleNames[role()] + ')', at: new Date().toISOString(), text: t }); addEvent(s, 'comment', t.slice(0, 80)); state.ui.commentText = ''; save(); render(); },
+    decide(el, kind) {
+      const s = sub(el.dataset.id), t = (state.ui.decisionText || '').trim();
+      const r = W.transition(s, role(), kind); if (!r.ok) return toast(r.reason);
+      if (kind === 'request_changes' && !t) return toast('Add a comment so the writer knows what to change.');
+      s.status = r.to; if (t) s.comments.push({ by: user().name + ' (' + D.roleNames[role()] + ')', at: new Date().toISOString(), text: t });
+      addEvent(s, kind === 'signoff' ? 'legal sign-off' : kind === 'approve' ? 'approved' : 'changes requested', t || '—'); state.ui.decisionText = ''; save(); render();
+    },
+    signoff(el) { actions.decide(el, 'signoff'); }, approve(el) { actions.decide(el, 'approve'); }, request_changes(el) { actions.decide(el, 'request_changes'); },
+    revise(el) {
+      const s = sub(el.dataset.id), last = s.versions[s.versions.length - 1];
+      state.work = Object.assign(blankWork(), { subId: s.id, title: s.title, text: last ? last.text : '', editing: false }); s.status = 'draft'; addEvent(s, 'reopened', 'Writer opened it to revise');
+      state.view = 'review'; state.ui.open = null; recheckLocal(); save(); render();
+    },
+    srctab(el) { state.ui.srcTab = el.dataset.v; render(); },
+    toggle(el) { const it = state.sources[el.dataset.t].find((x) => x.id === el.dataset.id); it.enabled = it.enabled === false; bump((it.enabled ? 'Enabled ' : 'Disabled ') + it.id); },
+    del(el) { const t = el.dataset.t; const key = t === 'palette' ? 'hex' : 'id'; state.sources[t] = state.sources[t].filter((x) => x[key] !== el.dataset.id); bump('Deleted ' + el.dataset.id + ' from ' + t); },
+    delconf(el) { const [x] = state.sources.confidential.splice(+el.dataset.i, 1); bump('Removed confidential term "' + x + '"'); },
+    runeval() { state.ui.evalResult = E.evaluateSet(D.evalSet, state.sources, { now: new Date() }); render(); },
+    reset() { try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ } state = fresh(); render(); toast('Demo data reset.'); },
+  };
+  const NEEDS_PERM = { signoff: 'signoff', approve: 'approve', request_changes: 'request_changes' };
+
+  document.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-a]'); if (!el || el.disabled) return;
+    if (el.tagName === 'A') e.preventDefault();
+    const fn = actions[el.dataset.a]; if (fn) fn(el);
+  });
+  document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('mark[data-a]')) { e.preventDefault(); actions.focus(e.target); } });
+  document.addEventListener('input', (e) => {
+    const b = e.target.dataset && e.target.dataset.bind; if (!b) return;
+    const w = state.work, v = e.target.value;
+    if (b === 'title') w.title = v; else if (b === 'text') w.text = v; else if (b === 'alt') w.alt = v;
+    else if (b === 'reason') state.ui.reasonText = v; else if (b === 'comment') state.ui.commentText = v; else if (b === 'decision') state.ui.decisionText = v;
+    else if (b === 'cu') state.settings.custom.url = v; else if (b === 'cm') state.settings.custom.model = v; else if (b === 'ck') state.settings.custom.key = v;
+    if (['title', 'text', 'alt', 'cu', 'cm', 'ck'].includes(b)) save();
+  });
+  document.addEventListener('change', async (e) => {
+    const t = e.target, b = t.dataset && t.dataset.bind; if (!b) return; const w = state.work;
+    if (b === 'user') { state.userId = t.value; state.ui.open = state.ui.open; save(); render(); }
+    else if (b === 'sample') { const s = D.samples.find((x) => x.id === t.value); if (s) { state.work = Object.assign(blankWork(), { title: s.title, text: s.text }); save(); render(); } }
+    else if (b === 'file') {
+      const f = t.files[0]; if (!f) return;
+      try {
+        let text;
+        if (/\.docx$/i.test(f.name)) { if (!window.JSZip) throw new Error('The Word reader could not load.'); text = await F.readDocx(window.JSZip, await f.arrayBuffer()); } else text = await f.text();
+        state.work = Object.assign(blankWork(), { title: f.name.replace(/\.[^.]+$/, ''), text }); save(); render(); toast('Loaded ' + f.name);
+      } catch (err) { toast(err.message || 'Could not read that file.'); }
+    } else if (b === 'img') {
+      const f = t.files[0]; if (!f) return;
+      const url = URL.createObjectURL(f), img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(img, 0, 0, 64, 64);
+        w.imageInfo = { width: img.naturalWidth || img.width, height: img.naturalHeight || img.height, dominant: F.dominantColours(x.getImageData(0, 0, 64, 64).data, 4) };
+        w.imageUrl = url; if (!w.title) w.title = f.name.replace(/\.[^.]+$/, ''); w.checked = false; save(); render();
+      };
+      img.onerror = () => toast('Could not open that image.'); img.src = url;
+    } else if (b === 'islogo') { w.isLogo = t.checked; save(); }
+    else if (b === 'usecontrast') { w.useContrast = t.checked; save(); }
+    else if (b === 'fg') { w.fg = t.value; save(); } else if (b === 'bg') { w.bg = t.value; save(); }
+    else if (b === 'aitoggle') { state.settings.aiEnabled = t.checked; save(); render(); }
+    else if (b === 'prov') { state.settings.provider = t.value; save(); render(); }
+    else if (b === 'factdate') { const f = state.sources.facts.find((x) => x.id === t.dataset.id); f.validUntil = t.value; bump('Changed valid-until of ' + f.id + ' to ' + (t.value || 'no end date')); }
+  });
+  document.addEventListener('submit', (e) => {
+    const k = e.target.dataset && e.target.dataset.form; if (!k) return; e.preventDefault(); const S = state.sources, $ = (id) => document.getElementById(id).value.trim();
+    if (k === 'fact') { const id = 'F-' + String(S.facts.length + 1).padStart(2, '0') + uid('').slice(-1); S.facts.push({ id, text: $('nf-text'), evidence: $('nf-ev'), validUntil: document.getElementById('nf-until').value }); bump('Added fact ' + id); }
+    else if (k === 'term') { const id = 'T-' + String(S.terms.length + 1).padStart(2, '0') + uid('').slice(-1); S.terms.push({ id, avoid: $('nt-avoid'), prefer: $('nt-prefer'), reason: $('nt-why'), severity: 'medium', source: S.name }); bump('Added term ' + id); }
+    else if (k === 'colour') { S.palette.push({ name: $('nc-name'), hex: document.getElementById('nc-hex').value.toUpperCase() }); bump('Added colour'); }
+    else if (k === 'conf') { S.confidential.push($('ncf')); bump('Added confidential term'); }
+  });
+
+  render(); detectAI();
+  window.__bs = { state: () => state, E, D, A, W, F }; // for tests
+})();
+
+</script>
+</body></html>
