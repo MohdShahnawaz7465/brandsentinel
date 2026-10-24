@@ -13,7 +13,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from . import ai, engine as E
+from . import ai, db, engine as E
+from .store import router as store_router
 from .config import load_env
 
 load_env()
@@ -25,6 +26,16 @@ app = FastAPI(title="BrandSentinel API", version="0.3")
 # ALLOWED_ORIGINS in .env: comma-separated frontend addresses. "*" (everything) is only for local development.
 ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_methods=["*"], allow_headers=["*"])
+
+app.include_router(store_router)
+
+
+@app.exception_handler(db.NoDatabase)
+async def no_database(request: Request, exc: db.NoDatabase):
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse({"detail": str(exc)}, status_code=503)
+
 
 RATE_LIMIT, RATE_WINDOW = int(os.environ.get("AI_RATE_LIMIT", "20")), 60.0  # AI requests per minute per visitor
 GLOBAL_LIMIT = int(os.environ.get("AI_GLOBAL_LIMIT", "120"))  # AI requests per minute for everyone together (protects the API key)
