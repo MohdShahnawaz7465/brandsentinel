@@ -16,6 +16,156 @@
   let aiTools = { sample: null, server: null, checked: false };
   let busy = '';
 
+  /* ---------- server login (demo accounts, no passwords) ----------
+     The token lives in sessionStorage only (never localStorage, never in a URL). Without BS_API_URL, or when the
+     server cannot be reached, the app keeps working from this browser exactly as before. */
+  const SERVER_ON = !!(typeof window !== 'undefined' && window.BS_API_URL);
+  const AUTH_KEY = 'brandsentinel.auth';
+  let auth = { token: '', user: null, connecting: false };
+  try { const a = JSON.parse(sessionStorage.getItem(AUTH_KEY) || 'null'); if (a && a.token && a.user) auth = { token: a.token, user: a.user, connecting: false }; } catch (e) { /* no session storage: stay logged out */ }
+  const signedIn = () => !!(SERVER_ON && auth.token && auth.user);
+  if (signedIn()) state.userId = auth.user.id;
+  async function api(path, opts) {
+    const o = opts || {}, ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 8000);
+    try {
+      const headers = { 'Content-Type': 'application/json' }; if (auth.token) headers.Authorization = 'Bearer ' + auth.token;
+      const res = await fetch(API_URL + path, { method: o.method || 'GET', signal: ctl.signal, headers, body: o.body ? JSON.stringify(o.body) : undefined });
+      let j = null; try { j = await res.json(); } catch (e) { /* not JSON */ }
+      if (res.status === 401 && auth.token) logout(true);
+      if (!res.ok) { const err = new Error((j && j.detail) || ('Server answered ' + res.status)); err.status = res.status; throw err; }
+      return j;
+    } finally { clearTimeout(timer); }
+  }
+  async function demoLogin(roleName) {
+    if (auth.connecting) return;
+    auth.connecting = true; render();
+    try {
+      const j = await api('/api/auth/demo', { method: 'POST', body: { role: roleName } });
+      auth = { token: j.token, user: j.user, connecting: false };
+      try { sessionStorage.setItem(AUTH_KEY, JSON.stringify({ token: j.token, user: j.user })); } catch (e) { /* ignore */ }
+      state.userId = j.user.id; state.ui = {}; await loadServerSubs(true); save(); toast('Signed in as ' + j.user.name + '.');
+    } catch (e) {
+      auth.connecting = false;
+      toast(e.name === 'AbortError' ? 'The server is waking up (the first time takes a few seconds). Press the button again, or keep working in this browser only.' : 'Could not sign in (' + (e.message || 'server not reachable') + '). You can keep working in this browser only.');
+    }
+    render();
+  }
+  function logout(expired) {
+    auth = { token: '', user: null, connecting: false };
+    try { sessionStorage.removeItem(AUTH_KEY); } catch (e) { /* ignore */ }
+    state.subs = state.subs.filter((s) => !s.onServer); // other people's drafts must not stay in this browser
+    if (state.work.subId && !sub(state.work.subId)) state.work = blankWork();
+    state.ui = {}; persistLocal();
+    if (expired) toast('Your login expired. Press a demo login button again.');
+    render();
+  }
+  /* ---------- saving drafts on the server (writers only). Local copy always stays; the server copy is extra. ---------- */
+  let syncChain = Promise.resolve(), syncTimer = null, syncState = 'idle', syncWarned = false;
+  const draftSub = () => { const s = state.work.subId ? sub(state.work.subId) : null; return s && !s.sample && signedIn() && auth.user.role === 'writer' && s.author === auth.user.name ? s : null; };
+  function enqueueSync(job) { const p = syncChain.then(job); syncChain = p.catch(() => {}); return p; }
+  function scheduleSync() {
+    if (!signedIn()) return;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => { const s = draftSub(); if (s && ['draft', 'changes_requested'].includes(s.status)) enqueueSync(() => pushSub(s)).catch(() => { /* already reported */ }); }, 1500);
+  }
+  function syncLabel() {
+    const s = draftSub();
+    if (syncState === 'saving') return ['Saving…', 'plain'];
+    if (syncState === 'fail') return ['Not saved to server', 'warn'];
+    if (s && s.onServer) return ['Saved on server', 'ok'];
+    return ['Signed in to server', 'ok'];
+  }
+  function paintBadge() { const el = document.getElementById('syncbadge'); if (!el) return; const l = syncLabel(); el.textContent = l[0]; el.className = 'pill ' + l[1]; }
+  function setSync(st, err) {
+    syncState = st;
+    if (st === 'fail' && !syncWarned) { syncWarned = true; toast('Could not save to the server (' + ((err && err.message) || 'not reachable') + '). Your work is still safe in this browser.'); }
+    if (st === 'ok') syncWarned = false;
+    paintBadge();
+  }
+  const subData = (s) => { const d = clone(s); delete d.serverEvents; delete d.onServer; d.draftText = state.work.subId === s.id ? state.work.text : undefined; return d; };
+  async function pushSub(s) {
+    setSync('saving');
+    try {
+      const body = { title: s.title || 'Untitled draft', data: subData(s) };
+      if (!s.onServer) {
+        const row = await api('/api/submissions', { method: 'POST', body });
+        const old = s.id; s.id = row.id; s.onServer = true; // the server id replaces the local P-001 style id
+        if (state.work.subId === old) state.work.subId = s.id;
+        if (state.ui.open === old) state.ui.open = s.id;
+        persistLocal();
+      } else {
+        await api('/api/submissions/' + encodeURIComponent(s.id), { method: 'PUT', body });
+      }
+      setSync('ok');
+    } catch (e) { setSync('fail', e); throw e; }
+  }
+  function finishSubmit(s, v) {
+    s.status = v.route; addEvent(s, 'submitted', 'v' + s.versions.length + ' sent to ' + (v.route === 'awaiting_specialist' ? 'Legal' : 'Brand manager'));
+    state.work = blankWork(); state.view = 'queue'; state.ui.open = s.id; state.ui.ver = null; save(); render(); toast('Submitted. It is now in the Queue.');
+  }
+  async function submitToServer(s, v) {
+    busy = 'Sending to the server…'; render();
+    try {
+      await enqueueSync(() => pushSub(s));
+      const row = await api('/api/submissions/' + encodeURIComponent(s.id) + '/transition', { method: 'POST', body: { action: 'submit', route: v.route } });
+      busy = ''; finishSubmit(s, Object.assign({}, v, { route: row.status })); // the server decides the route (a reworded unverified claim always goes to Legal)
+    } catch (e) {
+      busy = '';
+      if (e.status) { s.versions.pop(); if (e.status !== 401) toast('The server did not accept the submit: ' + e.message); render(); return; }
+      toast('The server could not be reached. Submitted in this browser only.'); finishSubmit(s, v);
+    }
+  }
+  /* ---------- the queue from the server ---------- */
+  const KIND_LABEL = { created: 'created', submit: 'submitted', signoff: 'legal sign-off', approve: 'approved', request_changes: 'changes requested' };
+
+  function mergeRow(row) {
+    const d = row.data || {};
+    let s = state.subs.find((x) => x.id === row.id);
+    const mine = s && state.work.subId === s.id && auth.user && s.author === auth.user.name; // the draft being edited keeps its local data
+    if (!s) { s = cleanData(d); state.subs.push(s); }
+    else if (!mine) Object.assign(s, cleanData(d));
+    Object.assign(s, { id: row.id, title: row.title, status: row.status, author: row.authorName, needsLegal: row.needsLegal, createdAt: s.createdAt || row.createdAt, onServer: true, sample: false });
+    delete s.draftText;
+    return s;
+  }
+  async function loadServerSubs(quiet) {
+    if (!signedIn()) return false;
+    try { const rows = await api('/api/submissions'); rows.forEach(mergeRow); persistLocal(); return true; }
+    catch (e) { if (!quiet && e.status !== 401) toast('Could not load the queue from the server (' + (e.message || 'not reachable') + '). Showing this browser only.'); return false; }
+  }
+  async function loadEvents(s) {
+    if (!s || !s.onServer || !signedIn()) return;
+    try {
+      const ev = await api('/api/submissions/' + encodeURIComponent(s.id) + '/events');
+      s.serverEvents = ev.map((e) => ({ at: e.at, by: e.actor, type: KIND_LABEL[e.kind] || e.kind, kind: e.kind, note: e.detail || '—' }));
+      if (state.ui.open === s.id) render();
+    } catch (e) { /* keep the local history */ }
+  }
+  const eventsOf = (s) => (s.onServer && s.serverEvents ? s.serverEvents : s.events);
+  const commentsOf = (s) => (s.onServer && s.serverEvents ? s.serverEvents.filter((e) => ['signoff', 'approve', 'request_changes'].includes(e.kind) && e.note !== '—').map((e) => ({ by: e.by, at: e.at, text: e.note })) : s.comments);
+  async function decideOnServer(s, kind, t) {
+    try {
+      const row = await api('/api/submissions/' + encodeURIComponent(s.id) + '/transition', { method: 'POST', body: { action: kind, note: t.slice(0, 500) } });
+      mergeRow(row); state.ui.decisionText = '';
+      await loadEvents(s); save(); render();
+      toast(kind === 'approve' ? 'Approved.' : kind === 'signoff' ? 'Legal sign-off recorded.' : 'Changes requested. The writer will see your comment.');
+    } catch (e) {
+      if (e.status === 401) return;
+      toast(e.status ? 'The server refused: ' + e.message : 'The server could not be reached. Nothing was changed.');
+      loadServerSubs(true).then(() => render());
+    }
+  }
+  function whoHtml() {
+    if (signedIn()) return '<span id="syncbadge" class="pill ' + syncLabel()[1] + '" title="Drafts you write while signed in are saved on the BrandSentinel server">' + syncLabel()[0] + '</span><span class="small">' + esc(auth.user.name) + ' · ' + D.roleNames[auth.user.role] + '</span><button class="btn small" data-a="logout">Log out</button>';
+    let h = '';
+    if (SERVER_ON) {
+      const dis = auth.connecting ? ' disabled' : '';
+      h += '<span class="small muted">Demo login</span>' + [['writer', 'Writer'], ['legal', 'Legal'], ['brand_manager', 'Brand manager']].map((r) => '<button class="btn small primary" data-a="login" data-v="' + r[0] + '"' + dis + '>' + (auth.connecting ? 'Connecting…' : r[1]) + '</button>').join('');
+    }
+    h += '<label for="user">Viewing as</label><select id="user" data-bind="user">' + D.users.map((u) => '<option value="' + u.id + '"' + (u.id === state.userId ? ' selected' : '') + '>' + esc(u.name) + ' · ' + D.roleNames[u.role] + '</option>').join('') + '</select>';
+    return h + '<span class="pill plain" title="Nothing is stored on the server unless you sign in">This browser only</span>';
+  }
+
   function fresh() {
     return { v: 1, userId: 'u-asha', view: 'review', settings: { aiEnabled: true, provider: 'auto', custom: { url: '', model: '', key: '' } }, sources: clone(D.sources), changelog: [], subs: D.seedHistory(), work: blankWork(), ui: {} };
   }
@@ -26,7 +176,8 @@
     } catch (e) { /* storage unavailable: run in memory */ }
     return fresh();
   }
-  function save() {
+  function save() { persistLocal(); scheduleSync(); }
+  function persistLocal() {
     try { const s = Object.assign({}, state, { ui: {} }); s.work = Object.assign({}, state.work, { imageUrl: '' }); localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* ignore */ }
   }
   const user = () => D.users.find((u) => u.id === state.userId) || D.users[0];
@@ -272,7 +423,7 @@
     const open = state.ui.open ? sub(state.ui.open) : null;
     if (open) return subDetail(open);
     const rows = state.subs.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    let h = '<div class="stack"><div class="row"><h2 class="grow">Review queue</h2></div>';
+    let h = '<div class="stack"><div class="row"><h2 class="grow">Review queue</h2>' + (signedIn() ? '<button class="btn small" data-a="refresh">Refresh from server</button>' : '') + '</div>';
     const mine = rows.filter((s) => (role() === 'legal' && s.status === 'awaiting_specialist') || (role() === 'brand_manager' && s.status === 'awaiting_manager') || (role() === 'writer' && s.author === user().name && ['draft', 'changes_requested'].includes(s.status)));
     if (mine.length) h += '<div class="notice"><b>' + mine.length + ' item' + (mine.length > 1 ? 's' : '') + ' waiting for you</b> as ' + D.roleNames[role()] + ': ' + mine.map((s) => '<a href="#" data-a="open" data-id="' + s.id + '">' + esc(s.title) + '</a>').join(', ') + '</div>';
     h += '<div class="card tablewrap"><table><thead><tr><th>Piece</th><th>Author</th><th>Status</th><th>Version</th><th>Created</th></tr></thead><tbody>';
@@ -306,9 +457,9 @@
       if (!act.some((a) => a[2])) h += '<p class="small muted">You are viewing as ' + D.roleNames[role()] + '. Switch role at the top to act on this piece.</p>';
     }
     if (['draft', 'changes_requested'].includes(s.status) && !s.sample && can('revise')) h += '<button class="btn" data-a="revise" data-id="' + s.id + '">Open in editor</button>';
-    h += '</div><div class="card stack"><h3>Comments</h3>' + (s.comments.length ? s.comments.map((c) => '<div class="small"><b>' + esc(c.by) + '</b> <span class="muted">' + fmt(c.at) + '</span><br>' + esc(c.text) + '</div>').join('') : '<p class="small muted">No comments yet.</p>')
-      + '<label class="f2">Add a comment<textarea id="comment" rows="2" data-bind="comment">' + esc(state.ui.commentText || '') + '</textarea></label><button class="btn small" data-a="comment" data-id="' + s.id + '">Post comment</button></div>';
-    h += '<div class="card stack"><h3>History</h3><ul class="timeline">' + s.events.slice().reverse().map((e) => '<li><b>' + esc(e.type) + '</b> · ' + esc(e.note) + '<br><span class="muted small">' + esc(e.by) + ' · ' + fmt(e.at) + '</span></li>').join('') + '</ul></div></section></div></div>';
+    h += '</div><div class="card stack"><h3>Comments</h3>' + (commentsOf(s).length ? commentsOf(s).map((c) => '<div class="small"><b>' + esc(c.by) + '</b> <span class="muted">' + fmt(c.at) + '</span><br>' + esc(c.text) + '</div>').join('') : '<p class="small muted">No comments yet.</p>')
+      + (s.onServer ? '<p class="small muted">Reviewer comments are saved together with the decision above.</p>' : '<label class="f2">Add a comment<textarea id="comment" rows="2" data-bind="comment">' + esc(state.ui.commentText || '') + '</textarea></label><button class="btn small" data-a="comment" data-id="' + s.id + '">Post comment</button>') + '</div>';
+    h += '<div class="card stack"><h3>History</h3><ul class="timeline">' + eventsOf(s).slice().reverse().map((e) => '<li><b>' + esc(e.type) + '</b> · ' + esc(e.note) + '<br><span class="muted small">' + esc(e.by) + ' · ' + fmt(e.at) + '</span></li>').join('') + '</ul></div></section></div></div>';
     return h;
   }
 
@@ -387,7 +538,7 @@
     const waiting = state.subs.filter((s) => (role() === 'legal' && s.status === 'awaiting_specialist') || (role() === 'brand_manager' && s.status === 'awaiting_manager')).length;
     const tabs = [['review', 'Review'], ['queue', 'Queue'], ['sources', 'Source library'], ['insights', 'Insights'], ['trust', 'Trust and AI']];
     let h = '<header class="bar"><div class="wrap"><div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3l11 4v8c0 7-4.5 12-11 14C9.500 27 5 22 5 15V7z" fill="var(--ink)"/><path d="M11 16l4 4 7-8" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>BrandSentinel</div>'
-      + '<div class="who"><label for="user">Viewing as</label><select id="user" data-bind="user">' + D.users.map((u) => '<option value="' + u.id + '"' + (u.id === state.userId ? ' selected' : '') + '>' + esc(u.name) + ' · ' + D.roleNames[u.role] + '</option>').join('') + '</select><button class="btn small" data-a="theme" aria-label="Switch light and dark theme">Theme</button></div></div>'
+      + '<div class="who">' + whoHtml() + '<button class="btn small" data-a="theme" aria-label="Switch light and dark theme">Theme</button></div></div>'
       + '<div class="wrap tabs" role="tablist">' + tabs.map((t) => '<button class="tab" ' + (state.view === t[0] ? 'aria-current="page"' : '') + ' data-a="nav" data-v="' + t[0] + '">' + t[1] + (t[0] === 'queue' && waiting ? '<span class="n">' + waiting + '</span>' : '') + '</button>').join('') + '</div></header><main class="wrap">';
     h += state.view === 'review' ? reviewView() : state.view === 'queue' ? queueView() : state.view === 'sources' ? sourcesView() : state.view === 'insights' ? insightsView() : trustView();
     app.innerHTML = h + '</main>'; window.scrollTo(0, y);
@@ -397,11 +548,14 @@
   const find = (id) => state.work.findings.find((f) => f.id === id);
   function bump(what) { state.sources.version++; state.changelog.push({ v: state.sources.version, what, by: user().name, at: new Date().toISOString() }); save(); render(); }
   const actions = {
-    nav(el) { state.view = el.dataset.v; state.ui.open = null; save(); render(); },
+    nav(el) { state.view = el.dataset.v; state.ui.open = null; save(); render(); if (state.view === 'queue' && signedIn()) loadServerSubs(true).then(() => render()); },
+    refresh() { return loadServerSubs(false).then((ok) => { render(); if (ok) toast('Queue refreshed from the server.'); }); },
     theme() { const r = document.documentElement; const dark = r.getAttribute('data-theme') === 'dark' || (!r.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches); r.setAttribute('data-theme', dark ? 'light' : 'dark'); },
     mode(el) { state.work.mode = el.dataset.v; state.work.checked = false; state.work.findings = []; state.work.editing = true; render(); },
     edit() { state.work.editing = true; render(); setTimeout(() => { const t = document.getElementById('text'); if (t) t.focus(); }, 0); },
     check() { return runCheck(); },
+    login(el) { return demoLogin(el.dataset.v); },
+    logout() { logout(false); },
     newreview() { state.work = blankWork(); save(); render(); },
     receiptdl(el) {
       const r = receiptStore[el.dataset.id]; if (!r) return;
@@ -430,15 +584,16 @@
       s.feedback = s.feedback.filter((x) => x.findingKey !== f.key); f.feedback = v; s.feedback.push({ findingKey: f.key, ruleId: f.ruleId, clear: v === 1 }); save(); render();
     },
     submit() {
+      if (busy) return;
       const w = state.work, s = sub(w.subId); const v = W.validateSubmit(s, w.findings); if (!v.ok) return toast(v.reason);
       if (w.mode === 'image') { toast('Image submissions are tracked with the checks only in this version.'); }
       s.versions.push({ n: s.versions.length + 1, text: w.mode === 'image' ? '[Image] ' + (w.alt || 'no alt text') : w.text, at: new Date().toISOString(), by: user().name, note: s.status === 'changes_requested' ? 'Revised after changes were requested' : '' });
       s.finalFindings = w.findings.map((f) => ({ ruleId: f.ruleId, title: f.title, severity: f.severity, status: f.status, reason: f.reason || '', quote: f.quote, origin: f.origin }));
       s.final = w.findings.map((f) => ({ ruleId: f.ruleId, status: f.status, reason: f.reason || '' }));
-      s.status = v.route; addEvent(s, 'submitted', 'v' + s.versions.length + ' sent to ' + (v.route === 'awaiting_specialist' ? 'Legal' : 'Brand manager'));
-      state.work = blankWork(); state.view = 'queue'; state.ui.open = s.id; state.ui.ver = null; save(); render(); toast('Submitted. It is now in the Queue.');
+      if (draftSub() === s) return submitToServer(s, v);
+      finishSubmit(s, v);
     },
-    open(el) { state.ui.open = el.dataset.id; state.ui.ver = null; state.ui.decisionText = ''; render(); },
+    open(el) { state.ui.open = el.dataset.id; state.ui.ver = null; state.ui.decisionText = ''; render(); const o = sub(el.dataset.id); if (o && o.onServer) loadEvents(o); },
     close() { state.ui.open = null; render(); },
     ver(el) { state.ui.ver = +el.dataset.v; render(); },
     comment(el) { const t = (state.ui.commentText || '').trim(); if (!t) return; const s = sub(el.dataset.id); s.comments.push({ by: user().name + ' (' + D.roleNames[role()] + ')', at: new Date().toISOString(), text: t }); addEvent(s, 'comment', t.slice(0, 80)); state.ui.commentText = ''; save(); render(); },
@@ -446,6 +601,7 @@
       const s = sub(el.dataset.id), t = (state.ui.decisionText || '').trim();
       const r = W.transition(s, role(), kind); if (!r.ok) return toast(r.reason);
       if (kind === 'request_changes' && !t) return toast('Add a comment so the writer knows what to change.');
+      if (s.onServer && signedIn()) return decideOnServer(s, kind, t);
       s.status = r.to; if (t) s.comments.push({ by: user().name + ' (' + D.roleNames[role()] + ')', at: new Date().toISOString(), text: t });
       addEvent(s, kind === 'signoff' ? 'legal sign-off' : kind === 'approve' ? 'approved' : 'changes requested', t || '—'); state.ui.decisionText = ''; save(); render();
     },
