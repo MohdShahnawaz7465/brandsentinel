@@ -1308,9 +1308,11 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
     return h + '</article>';
   }
 
+  const receiptStore = {};
+  function dlBtn(r) { receiptStore[r.id] = r; return '<p><button class="btn" data-a="receiptdl" data-id="' + esc(r.id) + '">Download this receipt (JSON)</button></p>'; }
   function receiptHtml(r) {
     if (!r) return '';
-    if (r.mode === 'rules-only') return '<div class="receipt"><b>What left our system: nothing.</b><p class="small">' + esc(r.reason) + '</p></div>';
+    if (r.mode === 'rules-only') return '<div class="receipt"><b>What left our system: nothing.</b><p class="small">' + esc(r.reason) + '</p>' + dlBtn(r) + '</div>';
     let h = '<div class="receipt ai"><b>What left our system</b>';
     if (r.error) h += '<p class="small"><span class="pill warn">AI step failed</span> ' + esc(r.error) + '. Only the sentences below were prepared; check the AI provider settings.</p>';
     h += '<p class="small">' + r.sent.length + ' sentence' + (r.sent.length === 1 ? '' : 's') + ' (' + r.bytes + ' characters) went to <b>' + esc(r.provider) + '</b> with ' + r.sourceIds.length + ' retrieved sources. The rest of your draft stayed here.';
@@ -1318,7 +1320,7 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
     h += '</p>';
     h += '<details><summary class="small">See exactly what was sent</summary>' + r.sent.map((s) => '<div class="sent">' + esc(s.text) + '</div>').join('') + '<p class="small muted" style="margin-top:8px">Sources attached: ' + esc(r.sourceIds.join(', ')) + '</p></details>';
     if (r.blocked.length) h += '<details><summary class="small">' + r.blocked.length + ' AI suggestion' + (r.blocked.length > 1 ? 's were' : ' was') + ' blocked</summary>' + r.blocked.map((b) => '<div class="sent">' + esc(b.title) + ' — ' + esc(b.reason) + '</div>').join('') + '</details>';
-    return h + '</div>';
+    return h + dlBtn(r) + '</div>';
   }
 
   /* ---------- views ---------- */
@@ -1504,6 +1506,13 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
     edit() { state.work.editing = true; render(); setTimeout(() => { const t = document.getElementById('text'); if (t) t.focus(); }, 0); },
     check() { return runCheck(); },
     newreview() { state.work = blankWork(); save(); render(); },
+    receiptdl(el) {
+      const r = receiptStore[el.dataset.id]; if (!r) return;
+      const out = { exported_at: new Date().toISOString(), tool: 'BrandSentinel', note: 'Only the sentences listed under "sent" left the system, after the hidden items were removed.', receipt: r };
+      const url = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }));
+      const a = document.createElement('a'); a.href = url; a.download = 'brandsentinel-receipt-' + r.id + '.json';
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
     focus(el) { const c = document.getElementById('card-' + el.dataset.id); if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); c.classList.add('flash'); setTimeout(() => c.classList.remove('flash'), 1400); } },
     chip(el) { const f = find(el.dataset.id); const c = f.chips[+el.dataset.i]; c.on = !c.on; save(); render(); },
     chipadd(el) { const f = find(el.dataset.id); const i = document.getElementById('chip-' + f.id); const v = (i.value || '').trim(); if (!v) return; f.chips.push({ t: v, on: true, custom: true }); save(); render(); },
