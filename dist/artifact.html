@@ -648,7 +648,7 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
       out = out.replace(re, () => { bump('confidential term', 1); return '[CONFIDENTIAL]'; });
     }
     out = out.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, () => { bump('email', 1); return '[EMAIL]'; });
-    out = out.replace(/(?<![\w$])\+?\d[\d\s-]{8,}\d(?!\w)/g, (m) => { if (/[.]/.test(m)) return m; bump('phone', 1); return '[PHONE]'; });
+    out = out.replace(/(?<![\w$])\+?\d[\d\s-]{8,}\d(?!\w)/g, (m) => { if (/[.]/.test(m) || /^\d{4}-\d{2}-\d{2}$/.test(m.trim())) return m; bump('phone', 1); return '[PHONE]'; });
     return { text: out, redactions: Object.entries(log).map(([kind, count]) => ({ kind, count })) };
   }
   function retrieve(segment, sources, k) {

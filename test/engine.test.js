@@ -222,3 +222,10 @@ test('confidential name: both "remove name" and "remove sentence" are offered', 
   assert.ok(ev.blocked.some((x) => x.label === 'Remove this sentence'), 'blocked while the point is still required');
   assert.ok(E.evaluateFixes(f, t, []).ok.some((x) => x.label === 'Remove this sentence'), 'allowed once the writer drops the point');
 });
+
+test('redaction keeps ISO dates but still hides phone numbers', () => {
+  const r = E.redact('Valid until 2026-09-30. Call 98765 43210.', []);
+  assert.match(r.text, /2026-09-30/);
+  assert.ok(!/98765/.test(r.text));
+  assert.strictEqual(r.redactions.length, 1);
+});

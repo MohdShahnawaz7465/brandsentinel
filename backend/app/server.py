@@ -96,7 +96,10 @@ def samples():
 
 
 @app.post("/api/review")
-async def review(body: ReviewIn):
+async def review(body: ReviewIn, request: Request):
+    # The AI step costs money, so it shares the same limits as /api/ai-complete. Rules-only reviews stay free.
+    if body.use_ai and make_provider() is not None and too_many(client_ip(request)):
+        raise HTTPException(429, "Too many AI requests. Wait a minute and try again, or send use_ai=false.")
     res = E.review_text(body.text, SEED["sources"])
     local = res["findings"]
     out = await ai.ai_review(body.text, SEED["sources"], local, make_provider(), body.use_ai)

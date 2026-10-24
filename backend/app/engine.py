@@ -726,8 +726,8 @@ def redact(text: str, confidential=None) -> dict:
     out = _rx(r"[\w.+-]+@[\w-]+\.[\w.-]+").sub(sub_email, out)
 
     def sub_phone(m):
-        if "." in m.group(0):
-            return m.group(0)
+        if "." in m.group(0) or re.fullmatch(r"\d{4}-\d{2}-\d{2}", m.group(0).strip()):
+            return m.group(0)  # decimals and ISO dates (2026-09-30) are not phone numbers
         bump("phone")
         return "[PHONE]"
 
