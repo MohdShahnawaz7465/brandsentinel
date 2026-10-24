@@ -186,7 +186,8 @@ test('every fix the engine offers on the sample drafts passes its own default me
       if (!f.fixes.length) continue;
       const ev = E.evaluateFixes(f, sm.text, f.keep);
       if (f.category === 'claim' && f.unverified) continue; // unsupported claims may be blocked on purpose
-      assert.strictEqual(ev.blocked.length, 0, sm.id + ' ' + f.ruleId + ' ' + f.quote + ' blocked: ' + JSON.stringify(ev.blocked.map((b) => b.check)));
+      const bad = ev.blocked.filter((b) => b.scope !== 'sentence'); // dropping a whole sentence is blocked on purpose until the writer drops that point
+      assert.strictEqual(bad.length, 0, sm.id + ' ' + f.ruleId + ' ' + f.quote + ' blocked: ' + JSON.stringify(bad.map((b) => b.check)));
     }
   }
 });
@@ -209,4 +210,15 @@ test('replacement does not double a neighbouring word', () => {
   const t = 'Our electrolyte powder is great.';
   const f = review(t).findings.find((x) => x.ruleId === 'T-04');
   assert.strictEqual(E.applyFix(t, f, f.fixes[0]), 'Our electrolyte mix is great.');
+});
+
+test('confidential name: both "remove name" and "remove sentence" are offered', () => {
+  const t = 'Hello there. Project Marlin launches soon. Bye now.';
+  const f = review(t).findings.find((x) => x.ruleId === 'R-CONF-1');
+  assert.deepStrictEqual(f.fixes.map((x) => x.label), ['Remove "Project Marlin"', 'Remove this sentence']);
+  assert.strictEqual(E.applyFix(t, f, f.fixes[1]), 'Hello there. Bye now.');
+  assert.strictEqual(E.applyFix(t, f, f.fixes[0]), 'Hello there. launches soon. Bye now.');
+  const ev = E.evaluateFixes(f, t, f.keep);
+  assert.ok(ev.blocked.some((x) => x.label === 'Remove this sentence'), 'blocked while the point is still required');
+  assert.ok(E.evaluateFixes(f, t, []).ok.some((x) => x.label === 'Remove this sentence'), 'allowed once the writer drops the point');
 });

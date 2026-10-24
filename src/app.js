@@ -12,7 +12,7 @@
   /* ---------- state ---------- */
   const blankWork = () => ({ subId: null, title: '', text: '', mode: 'text', alt: '', isLogo: false, useContrast: false, fg: '#767676', bg: '#FFFFFF', imageInfo: null, imageUrl: '', findings: [], verified: [], ai: [], receipt: null, checked: false, editing: true, stats: null });
   let state = load();
-    const API_URL = (typeof window !== 'undefined' && window.BS_API_URL) || 'http://127.0.0.1:8000';
+  const API_URL = (typeof window !== 'undefined' && window.BS_API_URL) || 'http://127.0.0.1:8000';
   let aiTools = { sample: null, server: null, checked: false };
   let busy = '';
 
@@ -41,7 +41,7 @@
   function addEvent(s, type, note) { s.events.push({ at: new Date().toISOString(), by: user().name + ' (' + D.roleNames[role()] + ')', type, note }); }
 
   /* ---------- AI provider ---------- */
-    async function detectAI() {
+  async function detectAI() {
     try { if (window.claude && window.claude.use) aiTools.sample = await window.claude.use('sample'); } catch (e) { aiTools.sample = null; }
     try {
       const r = await fetch(API_URL + '/api/health'); const j = await r.json();
@@ -53,7 +53,7 @@
     const c = state.settings.custom;
     if (state.settings.provider === 'custom' && c.url && c.model) return A.openAICompatible(c);
     if (state.settings.provider !== 'none' && aiTools.sample) return { name: 'Claude (through your claude.ai session)', call: (p) => aiTools.sample.json(p, { cache: false }) };
-        if (state.settings.provider !== 'none' && aiTools.server) return A.serverProvider(aiTools.server);
+    if (state.settings.provider !== 'none' && aiTools.server) return A.serverProvider(aiTools.server);
     return null;
   }
 
@@ -141,7 +141,22 @@
     return html + esc(text.slice(pos));
   }
 
-  function findingCard(f, locked) {
+  /* Findings on exactly the same words (for example hype + capitals on "AMAZING") show as one card. */
+  function sameSpan(a, b) { return a.id !== b.id && a.start >= 0 && a.start === b.start && a.end === b.end && a.status === b.status; }
+  function groupFindings(list) {
+    const seen = new Set(), out = [];
+    const rank = (f) => ((f.fixes || []).some((x) => (x.replacement || '').toLowerCase() !== (f.quote || '').toLowerCase()) ? 2 : 0) + (f.severity === 'high' ? 1 : 0);
+    list.forEach((f) => {
+      if (seen.has(f.id)) return;
+      const g = [f].concat(list.filter((o) => !seen.has(o.id) && sameSpan(f, o)));
+      g.forEach((x) => seen.add(x.id));
+      g.sort((a, b) => rank(b) - rank(a));
+      out.push({ f: g[0], others: g.slice(1) });
+    });
+    return out;
+  }
+  function findingCard(f, locked, others) {
+    others = others || [];
     const ev = f.fixes && f.fixes.length ? E.evaluateFixes(f, state.work.text, chipsOn(f)) : { ok: [], blocked: [] };
     const disputing = state.ui.disputing === f.id;
     const badges = [
@@ -156,6 +171,7 @@
     h += '<h4>' + esc(f.title) + '</h4>';
     if (f.quote) h += '<div class="quote">' + esc(f.quote) + '</div>';
     h += '<p class="small">' + esc(f.explanation) + '</p>';
+    if (others.length) h += '<p class="small muted">Same words also flagged: ' + others.map((o) => esc(o.title)).join('; ') + '. One fix below covers them.</p>';
     h += '<p class="small muted">Source: ' + esc(f.sourceLabel) + (f.origin === 'ai' ? ' · confidence ' + Math.round((f.confidence || 0) * 100) + '%' : '') + '</p>';
     if (f.status === 'disputed') h += '<p class="small"><b>Your reason:</b> ' + esc(f.reason) + '</p>';
     if (f.fixes && f.fixes.length && f.status !== 'disputed') {
@@ -235,13 +251,14 @@
     if (!w.checked) {
       h += '<div class="card stack"><h3>How a review works</h3><ol class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px"><li>Pick a sample draft (or paste your own) and press <b>Run check</b>.</li><li>Fixed rules run first, then the AI judges the rest. Every finding shows its source.</li><li>Apply a fix, or dispute it with a reason. Rewrites that change your meaning are blocked.</li><li>Submit. Legal and the Brand manager review in the Queue, and every step is logged.</li></ol><p class="small muted">You can switch role at the top to play the reviewer. Nothing here is sent anywhere unless the receipt says so.</p></div>';
     } else {
-      const c = { high: 0, medium: 0, low: 0 }; w.findings.forEach((f) => { c[f.severity]++; });
+      const groups = groupFindings(w.findings);
+      const c = { high: 0, medium: 0, low: 0 }; groups.forEach((g) => { c[g.f.severity]++; });
       const open = W.openCount(w.findings);
-      h += '<div class="card stack"><div class="sum"><h3 class="grow">' + (w.findings.length ? w.findings.length + ' finding' + (w.findings.length === 1 ? '' : 's') : 'No findings') + '</h3>'
+      h += '<div class="card stack"><div class="sum"><h3 class="grow">' + (groups.length ? groups.length + ' finding' + (groups.length === 1 ? '' : 's') : 'No findings') + '</h3>'
         + '<span class="pill high">' + c.high + ' high</span><span class="pill medium">' + c.medium + ' medium</span><span class="pill low">' + c.low + ' low</span></div>'
         + (w.stats ? '<p class="small muted">' + w.stats.words + ' words · reading level grade ' + w.stats.grade.toFixed(1) + (s && s.fixed ? ' · ' + s.fixed + ' fix' + (s.fixed > 1 ? 'es' : '') + ' applied' : '') + '</p>' : '')
         + receiptHtml(w.receipt) + '</div>';
-      w.findings.forEach((f) => { h += findingCard(f, locked); });
+      groups.forEach((g) => { h += findingCard(g.f, locked, g.others); });
       if (!w.findings.length) h += '<div class="notice">Nothing to fix. Submit it for approval below.</div>';
       const v = W.validateSubmit(s || { versions: [] }, w.findings);
       h += '<div class="card stack"><h3>Submit for approval</h3><p class="small">' + (open ? open + ' open finding' + (open > 1 ? 's' : '') + '. Apply a fix, edit the text, or dispute with a reason first.' : (v.ok ? (v.route === 'awaiting_specialist' ? 'This goes to Legal first because it still contains claims they must sign off, then to the Brand manager.' : 'This goes straight to the Brand manager.') : esc(v.reason))) + '</p><div class="row"><button class="btn primary" data-a="submit"' + (!can('submit') || !v.ok ? ' disabled' : '') + '>Submit for approval</button>' + (!can('submit') ? '<span class="small muted">Only writers can submit.</span>' : '') + '</div></div>';
@@ -391,8 +408,9 @@
     },
     dispute(el) { state.ui.disputing = el.dataset.id; state.ui.reasonText = ''; render(); const t = document.getElementById('reason-' + el.dataset.id); if (t) t.focus(); },
     disputecancel() { state.ui.disputing = null; render(); },
-    disputesave(el) { const f = find(el.dataset.id); const r = (state.ui.reasonText || '').trim(); if (!r) return toast('Add a reason so the reviewer understands.'); f.status = 'disputed'; f.reason = r; state.ui.disputing = null; addEvent(sub(state.work.subId), 'disputed', f.title + ': ' + r); save(); render(); },
-    undispute(el) { const f = find(el.dataset.id); f.status = 'open'; f.reason = ''; save(); render(); },
+    disputesave(el) { const f = find(el.dataset.id); const r = (state.ui.reasonText || '').trim(); if (!r) return toast('Add a reason so the reviewer understands.'); f.status = 'disputed'; f.reason = r; state.work.findings.forEach((o) => { if (o.start >= 0 && o.start === f.start && o.end === f.end && o.status === 'open') { o.status = 'disputed'; o.reason = r; } }); state.ui.disputing = null; addEvent(sub(state.work.subId), 'disputed', f.title + ': ' + r); save(); render(); },
+    undispute(el) { const f = find(el.dataset.id); const rs = f.reason; state.work.findings.forEach((o) => { if (o === f || (o.start >= 0 && o.start === f.start && o.end === f.end && o.status === 'disputed' && o.reason === rs)) { o.status = 'open'; o.reason = ''; } }); save(); render(); },
+
     fb(el) {
       const f = find(el.dataset.id); const v = +el.dataset.v; const s = sub(state.work.subId); if (!s) return;
       s.feedback = s.feedback.filter((x) => x.findingKey !== f.key); f.feedback = v; s.feedback.push({ findingKey: f.key, ruleId: f.ruleId, clear: v === 1 }); save(); render();

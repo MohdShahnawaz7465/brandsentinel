@@ -336,14 +336,19 @@ def tidy(s: str) -> str:
 
 
 def apply_fix(text: str, finding: dict, fix: dict) -> str:
-    out = tidy(text[: finding["start"]] + fix["replacement"] + text[finding["end"] :])
+    # scope "sentence" replaces the whole sentence the finding sits in, not just the quoted words
+    a, b = (finding["ctxStart"], finding["ctxEnd"]) if fix.get("scope") == "sentence" else (finding["start"], finding["end"])
+    out = tidy(text[:a] + fix["replacement"] + text[b:])
     return out.lstrip(" ")
 
 
 def context_after(text: str, finding: dict, fix: dict):
     cs, ce = finding["ctxStart"], finding["ctxEnd"]
     before = text[cs:ce]
-    after = tidy(text[cs : finding["start"]] + fix["replacement"] + text[finding["end"] : ce])
+    if fix.get("scope") == "sentence":
+        after = tidy(fix["replacement"])
+    else:
+        after = tidy(text[cs : finding["start"]] + fix["replacement"] + text[finding["end"] : ce])
     return before, after
 
 
@@ -560,7 +565,7 @@ def review_text(text: str, sources: dict, now=None) -> dict:
                     {
                         "ruleId": "R-CONF-1", "category": "confidentiality", "severity": "high", "start": m.start(), "end": m.end(), "quote": m.group(0),
                         "title": '"' + m.group(0) + '" is a confidential name', "explanation": rules["R-CONF-1"]["text"],
-                        "needsSpecialist": True, "fixes": [{"label": 'Remove "' + m.group(0) + '"', "replacement": ""}],
+                        "needsSpecialist": True, "fixes": [{"label": 'Remove "' + m.group(0) + '"', "replacement": ""}, {"label": "Remove this sentence", "replacement": "", "scope": "sentence"}],
                     }
                 )
 

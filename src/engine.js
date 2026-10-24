@@ -208,12 +208,14 @@
 
   function tidy(s) { return s.replace(/\b([A-Za-z]{3,}) \1\b/gi, '$1').replace(/ {2,}/g, ' ').replace(/ ([,.;:!?])/g, '$1').replace(/\( /g, '('); }
   function applyFix(text, finding, fix) {
-    return tidy(text.slice(0, finding.start) + fix.replacement + text.slice(finding.end)).replace(/^ +/, '');
+    // scope 'sentence' replaces the whole sentence the finding sits in, not just the quoted words
+    const a = fix.scope === 'sentence' ? finding.ctxStart : finding.start, b = fix.scope === 'sentence' ? finding.ctxEnd : finding.end;
+    return tidy(text.slice(0, a) + fix.replacement + text.slice(b)).replace(/^ +/, '');
   }
   function contextAfter(text, finding, fix) {
     const cs = finding.ctxStart, ce = finding.ctxEnd;
     const before = text.slice(cs, ce);
-    const after = tidy(text.slice(cs, finding.start) + fix.replacement + text.slice(finding.end, ce));
+    const after = fix.scope === 'sentence' ? tidy(fix.replacement) : tidy(text.slice(cs, finding.start) + fix.replacement + text.slice(finding.end, ce));
     return { before, after };
   }
   function evaluateFixes(finding, text, mustKeep) {
@@ -401,7 +403,7 @@
         while ((m = re.exec(text))) add({
           ruleId: 'R-CONF-1', category: 'confidentiality', severity: 'high', start: m.index, end: m.index + m[0].length, quote: m[0],
           title: '"' + m[0] + '" is a confidential name', explanation: rules['R-CONF-1'].text,
-          needsSpecialist: true, fixes: [{ label: 'Remove "' + m[0] + '"', replacement: '' }],
+          needsSpecialist: true, fixes: [{ label: 'Remove "' + m[0] + '"', replacement: '' }, { label: 'Remove this sentence', replacement: '', scope: 'sentence' }],
         });
       }
     }
