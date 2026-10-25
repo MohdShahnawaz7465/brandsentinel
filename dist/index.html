@@ -1228,6 +1228,35 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
   /* ---------- the queue from the server ---------- */
   const KIND_LABEL = { created: 'created', submit: 'submitted', signoff: 'legal sign-off', approve: 'approved', request_changes: 'changes requested' };
 
+  /* Anything that comes from the server is untrusted (any demo user can write it): keep only the known fields, with the right types. */
+  const sstr = (v, n) => String(v == null ? '' : v).slice(0, n || 2000);
+  const snum = (v) => (Number.isFinite(+v) ? +v : 0);
+  const spick = (v, list, dflt) => (list.indexOf(v) >= 0 ? v : dflt);
+  const sarr = (v, n) => (Array.isArray(v) ? v.slice(0, n || 200) : []);
+  function cleanReceipt(r) {
+    r = r && typeof r === 'object' ? r : {};
+    return {
+      id: sstr(r.id, 40), at: sstr(r.at, 40), mode: spick(r.mode, ['rules-only', 'ai-assisted'], 'rules-only'), provider: sstr(r.provider, 120), reason: sstr(r.reason, 400), error: sstr(r.error, 300),
+      sent: sarr(r.sent, 60).map((x) => ({ text: sstr(x && x.text, 1000) })),
+      redactions: sarr(r.redactions, 20).map((x) => ({ kind: sstr(x && x.kind, 40), count: snum(x && x.count) })),
+      sourceIds: sarr(r.sourceIds, 60).map((x) => sstr(x, 40)), bytes: snum(r.bytes), accepted: snum(r.accepted),
+      blocked: sarr(r.blocked, 60).map((x) => ({ title: sstr(x && x.title, 200), reason: sstr(x && x.reason, 300) })),
+    };
+  }
+  function cleanData(d) {
+    d = d && typeof d === 'object' ? d : {};
+    return {
+      id: sstr(d.id, 40), title: sstr(d.title, 200), author: sstr(d.author, 80), status: spick(d.status, Object.keys(W.STATUS), 'draft'), createdAt: sstr(d.createdAt, 40), needsLegal: !!d.needsLegal, fixed: snum(d.fixed),
+      versions: sarr(d.versions, 50).map((v, i) => ({ n: snum(v && v.n) || i + 1, text: sstr(v && v.text, 20000), at: sstr(v && v.at, 40), by: sstr(v && v.by, 80), note: sstr(v && v.note, 300) })),
+      firstCheck: Array.isArray(d.firstCheck) ? d.firstCheck.slice(0, 200).map((f) => ({ ruleId: sstr(f && f.ruleId, 40), category: sstr(f && f.category, 40) })) : null,
+      final: sarr(d.final, 200).map((f) => ({ ruleId: sstr(f && f.ruleId, 40), status: sstr(f && f.status, 20), reason: sstr(f && f.reason, 500) })),
+      finalFindings: sarr(d.finalFindings, 200).map((f) => ({ ruleId: sstr(f && f.ruleId, 40), title: sstr(f && f.title, 300), severity: spick(f && f.severity, ['high', 'medium', 'low'], 'low'), status: sstr(f && f.status, 20), reason: sstr(f && f.reason, 500), quote: sstr(f && f.quote, 500), origin: spick(f && f.origin, ['rule', 'ai'], 'rule') })),
+      comments: sarr(d.comments, 200).map((c) => ({ by: sstr(c && c.by, 100), at: sstr(c && c.at, 40), text: sstr(c && c.text, 1000) })),
+      events: sarr(d.events, 300).map((e) => ({ at: sstr(e && e.at, 40), by: sstr(e && e.by, 100), type: sstr(e && e.type, 40), note: sstr(e && e.note, 500) })),
+      receipts: sarr(d.receipts, 20).map(cleanReceipt),
+      feedback: sarr(d.feedback, 200).map((f) => ({ findingKey: sstr(f && f.findingKey, 120), ruleId: sstr(f && f.ruleId, 40), clear: !!(f && f.clear) })),
+    };
+  }
   function mergeRow(row) {
     const d = row.data || {};
     let s = state.subs.find((x) => x.id === row.id);
@@ -1264,6 +1293,15 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
       toast(e.status ? 'The server refused: ' + e.message : 'The server could not be reached. Nothing was changed.');
       loadServerSubs(true).then(() => render());
     }
+  }
+  function guideHtml() {
+    return '<div class="card stack"><h3>Try this in 2 minutes</h3><ol class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">'
+      + '<li>At the top press <b>Demo login: Writer</b>.</li>'
+      + '<li>In "Try a sample" choose <b>Product page (nearly clean)</b>, press <b>Run check</b>, then <b>Dispute</b> the one warning with a short reason.</li>'
+      + '<li>Press <b>Submit for approval</b>. It appears in the <b>Queue</b>.</li>'
+      + '<li><b>Log out</b>, press <b>Demo login: Brand manager</b>, open the piece in the Queue and press <b>Approve</b>.</li>'
+      + '<li>To see the Legal step, check this sentence as Writer instead: <i>Clinically proven to reduce cramps.</i> Dispute the finding and submit. Then log in as <b>Legal</b> and press <b>Sign off</b> before the Brand manager approves.</li>'
+      + '<li>Open <b>Insights</b> and <b>Trust and AI</b> to see what the team gets wrong most and what was sent to the AI.</li></ol></div>';
   }
   function whoHtml() {
     if (signedIn()) return '<span id="syncbadge" class="pill ' + syncLabel()[1] + '" title="Drafts you write while signed in are saved on the BrandSentinel server">' + syncLabel()[0] + '</span><span class="small">' + esc(auth.user.name) + ' · ' + D.roleNames[auth.user.role] + '</span><button class="btn small" data-a="logout">Log out</button>';
@@ -1468,7 +1506,7 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
     if (r.mode === 'rules-only') return '<div class="receipt"><b>What left our system: nothing.</b><p class="small">' + esc(r.reason) + '</p>' + dlBtn(r) + '</div>';
     let h = '<div class="receipt ai"><b>What left our system</b>';
     if (r.error) h += '<p class="small"><span class="pill warn">AI step failed</span> ' + esc(r.error) + '. Only the sentences below were prepared; check the AI provider settings.</p>';
-    h += '<p class="small">' + r.sent.length + ' sentence' + (r.sent.length === 1 ? '' : 's') + ' (' + r.bytes + ' characters) went to <b>' + esc(r.provider) + '</b> with ' + r.sourceIds.length + ' retrieved sources. The rest of your draft stayed here.';
+    h += '<p class="small">' + r.sent.length + ' sentence' + (r.sent.length === 1 ? '' : 's') + ' (' + r.bytes + ' characters) went to <b>' + esc(r.provider) + '</b> with ' + r.sourceIds.length + ' retrieved sources. ' + (signedIn() ? 'The rest of your draft was not sent to any AI service.' : 'The rest of your draft stayed here.');
     if (r.redactions.length) h += ' Hidden before sending: ' + r.redactions.map((x) => x.count + ' ' + x.kind + (x.count > 1 ? 's' : '')).join(', ') + '.';
     h += '</p>';
     h += '<details><summary class="small">See exactly what was sent</summary>' + r.sent.map((s) => '<div class="sent">' + esc(s.text) + '</div>').join('') + '<p class="small muted" style="margin-top:8px">Sources attached: ' + esc(r.sourceIds.join(', ')) + '</p></details>';
@@ -1480,7 +1518,7 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
   function reviewView() {
     const w = state.work, locked = false;
     const s = w.subId ? sub(w.subId) : null;
-    let h = '<div class="cols"><section class="stack">';
+    let h = (signedIn() ? '<div class="notice warn"><b>Demo data is shared.</b> Everything saved while you are signed in can be seen by everyone who uses this demo. Do not enter real private text.</div>' : '') + '<div class="cols"><section class="stack">';
     h += '<div class="card stack"><div class="row"><h2 class="grow">Check a draft</h2><div class="seg" role="group" aria-label="Content type"><button data-a="mode" data-v="text" aria-pressed="' + (w.mode === 'text') + '">Text</button><button data-a="mode" data-v="image" aria-pressed="' + (w.mode === 'image') + '">Image</button></div></div>';
     if (!can('create') && !w.subId) h += '<div class="notice warn">You are viewing as <b>' + D.roleNames[role()] + '</b>. Writers start reviews. Switch to a writer at the top, or open a piece from the Queue.</div>';
     h += '<label class="f2">Title<input type="text" id="title" data-bind="title" value="' + esc(w.title) + '" placeholder="e.g. Autumn launch email"></label>';
@@ -1512,7 +1550,8 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
     }
     h += '</section><section class="stack">';
     if (!w.checked) {
-      h += '<div class="card stack"><h3>How a review works</h3><ol class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px"><li>Pick a sample draft (or paste your own) and press <b>Run check</b>.</li><li>Fixed rules run first, then the AI judges the rest. Every finding shows its source.</li><li>Apply a fix, or dispute it with a reason. Rewrites that change your meaning are blocked.</li><li>Submit. Legal and the Brand manager review in the Queue, and every step is logged.</li></ol><p class="small muted">You can switch role at the top to play the reviewer. Nothing here is sent anywhere unless the receipt says so.</p></div>';
+      h += '<div class="card stack"><h3>How a review works</h3><ol class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px"><li>Pick a sample draft (or paste your own) and press <b>Run check</b>.</li><li>Fixed rules run first, then the AI judges the rest. Every finding shows its source.</li><li>Apply a fix, or dispute it with a reason. Rewrites that change your meaning are blocked.</li><li>Submit. Legal and the Brand manager review in the Queue, and every step is logged.</li></ol>' + (signedIn() ? '<p class="small muted">You are signed in, so your drafts and decisions are saved on the BrandSentinel server. Text goes to an AI service only as the receipt shows.</p>' : '<p class="small muted">You can switch role at the top to play the reviewer. Nothing here is sent anywhere unless the receipt says so.</p>') + '</div>';
+      if (SERVER_ON) h += guideHtml();
     } else {
       const groups = groupFindings(w.findings);
       const c = { high: 0, medium: 0, low: 0 }; groups.forEach((g) => { c[g.f.severity]++; });
