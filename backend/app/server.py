@@ -13,7 +13,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from . import ai, db, engine as E
+from . import accounts, ai, db, engine as E
+from .netutil import client_ip
 from .store import router as store_router
 from .config import load_env
 
@@ -22,12 +23,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 with open(os.path.join(HERE, "seed.json"), encoding="utf-8") as f:
     SEED = json.load(f)
 
-app = FastAPI(title="BrandSentinel API", version="0.3")
+app = FastAPI(title="BrandSentinel API", version="0.4")
 # ALLOWED_ORIGINS in .env: comma-separated frontend addresses. "*" (everything) is only for local development.
 ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_methods=["*"], allow_headers=["*"])
 
 app.include_router(store_router)
+app.include_router(accounts.router)
 
 
 @app.exception_handler(db.NoDatabase)
@@ -41,17 +43,6 @@ RATE_LIMIT, RATE_WINDOW = int(os.environ.get("AI_RATE_LIMIT", "20")), 60.0  # AI
 GLOBAL_LIMIT = int(os.environ.get("AI_GLOBAL_LIMIT", "120"))  # AI requests per minute for everyone together (protects the API key)
 _hits: dict[str, deque] = defaultdict(deque)
 _all_hits: deque = deque()
-
-
-def client_ip(request: Request) -> str:
-    """Visitor address. Behind a host's proxy every request looks like it comes from the proxy, so with
-    TRUST_PROXY=1 we use the LAST X-Forwarded-For entry (added by the host's own proxy). The first entry
-    can be faked by the visitor, so it is never used."""
-    if os.environ.get("TRUST_PROXY") == "1":
-        parts = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
-        if parts:
-            return parts[-1]
-    return request.client.host if request.client else "unknown"
 
 
 def too_many(ip: str) -> bool:
@@ -109,6 +100,8 @@ def samples():
 @app.post("/api/review")
 async def review(body: ReviewIn, request: Request):
     # The AI step costs money, so it shares the same limits as /api/ai-complete. Rules-only reviews stay free.
+    if body.use_ai and not accounts.ai_allowed(request):
+        raise HTTPException(403, "Your admin has switched the AI step off for this workspace. Send use_ai=false.")
     if body.use_ai and make_provider() is not None and too_many(client_ip(request)):
         raise HTTPException(429, "Too many AI requests. Wait a minute and try again, or send use_ai=false.")
     res = E.review_text(body.text, SEED["sources"])
@@ -131,6 +124,8 @@ def evaluate():
 @app.post("/api/ai-complete")
 async def ai_complete(body: AICompleteIn, request: Request):
     """Proxy for the browser's AI step. The browser has already redacted the sentences; the API key stays here."""
+    if not accounts.ai_allowed(request):
+        raise HTTPException(403, "Your admin has switched the AI step off for this workspace.")
     if too_many(client_ip(request)):
         raise HTTPException(429, "Too many AI requests. Wait a minute and try again.")
     if "SENTENCES:" not in body.prompt or "SOURCES:" not in body.prompt:

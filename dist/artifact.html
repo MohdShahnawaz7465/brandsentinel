@@ -946,14 +946,15 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
       },
     };
   }
-   /* Sends the (already redacted) prompt to the BrandSentinel server, which holds the API key. */
+  /* Sends the (already redacted) prompt to the BrandSentinel server, which holds the API key. */
   function serverProvider(cfg, fetchImpl) {
     const f = fetchImpl || (typeof fetch !== 'undefined' ? fetch : null);
     const base = String(cfg.url || '').replace(/\/+$/, '');
     return {
       name: (cfg.model || 'AI model') + ' via BrandSentinel server',
       call: async (prompt) => {
-        const res = await f(base + '/api/ai-complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
+        const tok = typeof cfg.token === 'function' ? cfg.token() : cfg.token;
+        const res = await f(base + '/api/ai-complete', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, tok ? { Authorization: 'Bearer ' + tok } : {}), body: JSON.stringify({ prompt }) });
         if (!res.ok) throw new Error('AI server answered ' + res.status);
         return await res.json();
       },
@@ -961,7 +962,6 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
   }
   return { openAICompatible, serverProvider, parseJsonLoose, aiReview, pickSegments, buildPrompt, buildReceipt };
 });
-
 /* Roles, routing and insights. Pure logic, no DOM. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -1129,8 +1129,8 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
      server cannot be reached, the app keeps working from this browser exactly as before. */
   const SERVER_ON = !!(typeof window !== 'undefined' && window.BS_API_URL);
   const AUTH_KEY = 'brandsentinel.auth';
-  let auth = { token: '', user: null, connecting: false };
-  try { const a = JSON.parse(sessionStorage.getItem(AUTH_KEY) || 'null'); if (a && a.token && a.user) auth = { token: a.token, user: a.user, connecting: false }; } catch (e) { /* no session storage: stay logged out */ }
+  let auth = { token: '', user: null, workspace: null, connecting: false };
+  try { const a = JSON.parse(sessionStorage.getItem(AUTH_KEY) || 'null'); if (a && a.token && a.user) auth = { token: a.token, user: a.user, workspace: a.workspace || null, connecting: false }; } catch (e) { /* no session storage: stay logged out */ }
   const signedIn = () => !!(SERVER_ON && auth.token && auth.user);
   if (signedIn()) state.userId = auth.user.id;
   async function api(path, opts) {
@@ -1149,22 +1149,89 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
     auth.connecting = true; render();
     try {
       const j = await api('/api/auth/demo', { method: 'POST', body: { role: roleName } });
-      auth = { token: j.token, user: j.user, connecting: false };
-      try { sessionStorage.setItem(AUTH_KEY, JSON.stringify({ token: j.token, user: j.user })); } catch (e) { /* ignore */ }
-      state.userId = j.user.id; state.ui = {}; await loadServerSubs(true); save(); toast('Signed in as ' + j.user.name + '.');
+      applySession(j); await loadServerSubs(true); save(); toast('Signed in as ' + j.user.name + '.');
     } catch (e) {
       auth.connecting = false;
       toast(e.name === 'AbortError' ? 'The server is waking up (the first time takes a few seconds). Press the button again, or keep working in this browser only.' : 'Could not sign in (' + (e.message || 'server not reachable') + '). You can keep working in this browser only.');
     }
     render();
   }
+  function persistAuth() { try { sessionStorage.setItem(AUTH_KEY, JSON.stringify({ token: auth.token, user: auth.user, workspace: auth.workspace })); } catch (e) { /* ignore */ } }
+  function applySession(j) {
+    auth = { token: j.token, user: j.user, workspace: j.workspace || null, connecting: false };
+    persistAuth(); state.userId = j.user.id; state.ui = {};
+  }
+  /* ---------- real accounts and private workspaces (Round 3) ---------- */
+  let wsInfo = null, accountBusy = false;
+  const fval = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+  async function loadWorkspace() {
+    try {
+      wsInfo = await api('/api/workspace');
+      if (auth.workspace) { auth.workspace = { id: wsInfo.id, name: wsInfo.name, aiEnabled: wsInfo.aiEnabled, isDemo: wsInfo.isDemo }; persistAuth(); }
+    } catch (e) { wsInfo = null; if (e.status && e.status !== 401) toast(e.message); }
+  }
+  async function setWsAi(on) {
+    try {
+      const w = await api('/api/workspace/settings', { method: 'PUT', body: { ai_enabled: on } });
+      auth.workspace = w; persistAuth(); if (wsInfo) wsInfo.aiEnabled = w.aiEnabled;
+      toast(on ? 'The AI step is on for this workspace.' : 'The AI step is off for this workspace. Only the fixed checks run.');
+    } catch (e) { toast(e.message || 'Could not change the setting.'); }
+    render();
+  }
+  async function handleAccountForm(kind) {
+    if (accountBusy) return;
+    const v = kind === 'login' ? { email: fval('li-email').trim(), password: fval('li-pw') }
+      : kind === 'signup' ? { workspace_name: fval('su-ws').trim(), name: fval('su-name').trim(), email: fval('su-email').trim(), password: fval('su-pw') }
+        : { name: fval('mb-name').trim(), email: fval('mb-email').trim(), role: fval('mb-role'), password: fval('mb-pw') };
+    accountBusy = true; render();
+    try {
+      if (kind === 'member') {
+        await api('/api/workspace/members', { method: 'POST', body: v });
+        await loadWorkspace(); toast('Added ' + v.name + '. They can log in with that email and password.');
+      } else {
+        const j = await api(kind === 'login' ? '/api/auth/login' : '/api/auth/signup', { method: 'POST', body: v });
+        applySession(j); await loadServerSubs(true); state.view = 'review'; save();
+        toast(kind === 'signup' ? 'Workspace created. You are its admin. Add your team in the Account tab.' : 'Signed in as ' + j.user.name + '.');
+      }
+    } catch (e) {
+      toast(e.name === 'AbortError' ? 'The server is waking up. Wait a few seconds and press the button again.' : (e.message || 'Something went wrong.'));
+    }
+    accountBusy = false; render();
+  }
+  const ROLE_OPTS = [['writer', 'Writer'], ['legal', 'Legal reviewer'], ['brand_manager', 'Brand manager'], ['admin', 'Admin']];
+  function workspaceNotice() {
+    const w = auth.workspace;
+    if (w && !w.isDemo) return '<div class="notice"><b>Private workspace: ' + esc(w.name) + '.</b> Only people in this workspace can see these drafts.</div>';
+    return '<div class="notice warn"><b>Demo data is shared.</b> Everything saved while you are signed in to the demo can be seen by everyone who uses it. Do not enter real private text. To work privately, create your own workspace in the Account tab.</div>';
+  }
+  function accountView() {
+    if (!SERVER_ON) return '<div class="stack"><h2>Account</h2><p>Sign-in is not connected in this copy of BrandSentinel. Everything runs in this browser.</p></div>';
+    const dis = accountBusy ? ' disabled' : '';
+    if (!signedIn()) {
+      return '<div class="stack"><h2>Account</h2><div class="grid2">'
+        + '<div class="card stack"><h3>Log in</h3><p class="small muted">Use the email and password of an account in a workspace. To just look around, use the Demo login buttons at the top.</p>'
+        + '<form data-form="login" class="stack"><label class="f2">Email<input type="email" id="li-email" autocomplete="username" required></label><label class="f2">Password<input type="password" id="li-pw" autocomplete="current-password" required></label><div class="row"><button class="btn primary" type="submit"' + dis + '>' + (accountBusy ? 'Please wait…' : 'Log in') + '</button></div></form></div>'
+        + '<div class="card stack"><h3>Create a private workspace</h3><p class="small muted">You become its admin, and only people you add can see its drafts. Passwords are stored only as salted hashes.</p>'
+        + '<form data-form="signup" class="stack"><label class="f2">Workspace name<input type="text" id="su-ws" maxlength="80" required></label><label class="f2">Your name<input type="text" id="su-name" maxlength="80" autocomplete="name" required></label><label class="f2">Email<input type="email" id="su-email" autocomplete="username" required></label><label class="f2">Password <span class="hint">at least 8 characters</span><input type="password" id="su-pw" minlength="8" autocomplete="new-password" required></label><div class="row"><button class="btn primary" type="submit"' + dis + '>' + (accountBusy ? 'Please wait…' : 'Create workspace') + '</button></div></form></div></div></div>';
+    }
+    const w = auth.workspace || { name: 'Demo workspace', isDemo: true, aiEnabled: true };
+    let h = '<div class="stack"><h2>Account</h2><div class="card stack"><h3>' + esc(auth.user.name) + '</h3><p class="small">' + D.roleNames[auth.user.role] + ' in <b>' + esc(w.name) + '</b>. ' + (w.isDemo ? 'This is the shared demo workspace, so everyone who uses the demo sees the same drafts. To use BrandSentinel with a team, log out and create your own private workspace.' : 'Only people in this workspace can see its drafts.') + '</p></div>';
+    if (!w.isDemo && auth.user.role === 'admin') {
+      h += '<div class="card stack"><h3>Workspace settings</h3><label class="row"><input type="checkbox" id="wsai" data-bind="wsai"' + (w.aiEnabled ? ' checked' : '') + '> Let the AI step judge sentences the fixed rules cannot. When it is off, only the fixed checks run for everyone in this workspace.</label></div>';
+      const members = wsInfo && wsInfo.members ? wsInfo.members : [];
+      h += '<div class="card stack"><h3>People</h3>' + (members.length ? '<div class="tablewrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th></tr></thead><tbody>' + members.map((m) => '<tr><td>' + esc(m.name) + '</td><td class="small">' + esc(m.email) + '</td><td>' + (D.roleNames[m.role] || esc(m.role)) + '</td></tr>').join('') + '</tbody></table></div>' : '<p class="small muted">Loading…</p>')
+        + '<p class="small muted">To try the full flow (Writer, then Legal, then Brand manager), add one person for each role and log in as each of them.</p>'
+        + '<form data-form="member" class="stack"><div class="grid2"><label class="f2">Name<input type="text" id="mb-name" maxlength="80" required></label><label class="f2">Email<input type="email" id="mb-email" required></label><label class="f2">Role<select id="mb-role">' + ROLE_OPTS.map((r) => '<option value="' + r[0] + '">' + r[1] + '</option>').join('') + '</select></label><label class="f2">Password <span class="hint">at least 8 characters</span><input type="password" id="mb-pw" minlength="8" autocomplete="new-password" required></label></div><div class="row"><button class="btn primary" type="submit"' + dis + '>Add person</button></div></form></div>';
+    } else if (!w.isDemo) h += '<p class="small muted">Ask your workspace admin to add people or change settings.</p>';
+    return h + '</div>';
+  }
   function logout(expired) {
-    auth = { token: '', user: null, connecting: false };
+    auth = { token: '', user: null, workspace: null, connecting: false }; wsInfo = null;
     try { sessionStorage.removeItem(AUTH_KEY); } catch (e) { /* ignore */ }
     state.subs = state.subs.filter((s) => !s.onServer); // other people's drafts must not stay in this browser
     if (state.work.subId && !sub(state.work.subId)) state.work = blankWork();
     state.ui = {}; persistLocal();
-    if (expired) toast('Your login expired. Press a demo login button again.');
+    if (expired) toast('Your login expired. Please log in again.');
     render();
   }
   /* ---------- saving drafts on the server (writers only). Local copy always stays; the server copy is extra. ---------- */
@@ -1302,11 +1369,12 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
       + '<li>Open <b>Insights</b> and <b>Trust and AI</b> to see what the team gets wrong most and what was sent to the AI.</li></ol></div>';
   }
   function whoHtml() {
-    if (signedIn()) return '<span id="syncbadge" class="pill ' + syncLabel()[1] + '" title="Drafts you write while signed in are saved on the BrandSentinel server">' + syncLabel()[0] + '</span><span class="small">' + esc(auth.user.name) + ' · ' + D.roleNames[auth.user.role] + '</span><button class="btn small" data-a="logout">Log out</button>';
+    if (signedIn()) return '<span id="syncbadge" class="pill ' + syncLabel()[1] + '" title="Drafts you write while signed in are saved on the BrandSentinel server">' + syncLabel()[0] + '</span><span class="small">' + esc(auth.user.name) + ' · ' + D.roleNames[auth.user.role] + '</span>' + (auth.workspace ? '<span class="pill plain" title="Your workspace">' + esc(auth.workspace.name) + '</span>' : '') + '<button class="btn small" data-a="logout">Log out</button>';
     let h = '';
     if (SERVER_ON) {
       const dis = auth.connecting ? ' disabled' : '';
       h += '<span class="small muted">Demo login</span>' + [['writer', 'Writer'], ['legal', 'Legal'], ['brand_manager', 'Brand manager']].map((r) => '<button class="btn small primary" data-a="login" data-v="' + r[0] + '"' + dis + '>' + (auth.connecting ? 'Connecting…' : r[1]) + '</button>').join('');
+      h += '<button class="btn small" data-a="openauth">Email sign-in</button>';
     }
     h += '<label for="user">Viewing as</label><select id="user" data-bind="user">' + D.users.map((u) => '<option value="' + u.id + '"' + (u.id === state.userId ? ' selected' : '') + '>' + esc(u.name) + ' · ' + D.roleNames[u.role] + '</option>').join('') + '</select>';
     return h + '<span class="pill plain" title="Nothing is stored on the server unless you sign in">This browser only</span>';
@@ -1326,7 +1394,7 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
   function persistLocal() {
     try { const s = Object.assign({}, state, { ui: {} }); s.work = Object.assign({}, state.work, { imageUrl: '' }); localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* ignore */ }
   }
-  const user = () => D.users.find((u) => u.id === state.userId) || D.users[0];
+  const user = () => (signedIn() ? auth.user : null) || D.users.find((u) => u.id === state.userId) || D.users[0];
   const role = () => user().role;
   const can = (a) => W.can(role(), a);
   const sub = (id) => state.subs.find((s) => s.id === id);
@@ -1346,11 +1414,12 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
     } catch (e) { aiTools.server = null; }
     aiTools.checked = true; render();
   }
+  const aiOnHere = () => !!state.settings.aiEnabled && !(signedIn() && auth.workspace && auth.workspace.aiEnabled === false);
   function getProvider() {
     const c = state.settings.custom;
     if (state.settings.provider === 'custom' && c.url && c.model) return A.openAICompatible(c);
     if (state.settings.provider !== 'none' && aiTools.sample) return { name: 'Claude (through your claude.ai session)', call: (p) => aiTools.sample.json(p, { cache: false }) };
-    if (state.settings.provider !== 'none' && aiTools.server) return A.serverProvider(aiTools.server);
+    if (state.settings.provider !== 'none' && aiTools.server) return A.serverProvider(Object.assign({}, aiTools.server, { token: () => (signedIn() ? auth.token : '') }));
     return null;
   }
 
@@ -1396,8 +1465,8 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
     if (!w.text.trim()) return toast('Add some text first.');
     const s = ensureSub(); if (w.title) s.title = w.title;
     w.ai = []; w.editing = false;
-    recheckLocal(); busy = 'Fixed checks done. ' + (state.settings.aiEnabled ? 'Asking the AI about the sentences they could not judge…' : ''); render();
-    const res = await A.aiReview({ text: w.text, sources: state.sources, localFindings: w.findings, provider: getProvider(), enabled: state.settings.aiEnabled });
+    recheckLocal(); busy = 'Fixed checks done. ' + (aiOnHere() ? 'Asking the AI about the sentences they could not judge…' : ''); render();
+    const res = await A.aiReview({ text: w.text, sources: state.sources, localFindings: w.findings, provider: getProvider(), enabled: aiOnHere() });
     w.ai = res.findings; w.receipt = res.receipt; s.receipts.push(res.receipt);
     const all = E.reviewText(w.text, state.sources, { now: new Date() }).findings.concat(res.findings).sort(sortF);
     carry(w.findings, all); w.findings = all;
@@ -1516,7 +1585,7 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
   function reviewView() {
     const w = state.work, locked = false;
     const s = w.subId ? sub(w.subId) : null;
-    let h = (signedIn() ? '<div class="notice warn"><b>Demo data is shared.</b> Everything saved while you are signed in can be seen by everyone who uses this demo. Do not enter real private text.</div>' : '') + '<div class="cols"><section class="stack">';
+    let h = (signedIn() ? workspaceNotice() : '') + '<div class="cols"><section class="stack">';
     h += '<div class="card stack"><div class="row"><h2 class="grow">Check a draft</h2><div class="seg" role="group" aria-label="Content type"><button data-a="mode" data-v="text" aria-pressed="' + (w.mode === 'text') + '">Text</button><button data-a="mode" data-v="image" aria-pressed="' + (w.mode === 'image') + '">Image</button></div></div>';
     if (!can('create') && !w.subId) h += '<div class="notice warn">You are viewing as <b>' + D.roleNames[role()] + '</b>. Writers start reviews. Switch to a writer at the top, or open a piece from the Queue.</div>';
     h += '<label class="f2">Title<input type="text" id="title" data-bind="title" value="' + esc(w.title) + '" placeholder="e.g. Autumn launch email"></label>';
@@ -1666,7 +1735,7 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
   function trustView() {
     const S = state.settings, ev = state.ui.evalResult, prov = getProvider();
     let h = '<div class="stack"><h2>Trust and AI use</h2><div class="grid2"><div class="card stack"><h3>AI review</h3>';
-    h += '<p class="small">Status: <b>' + (!S.aiEnabled ? 'switched off' : prov ? 'ready (' + esc(prov.name) + ')' : aiTools.checked ? 'no AI provider in this view; fixed checks only' : 'checking…') + '</b></p>';
+    h += '<p class="small">Status: <b>' + (!aiOnHere() ? (S.aiEnabled ? 'switched off by your workspace admin' : 'switched off') : prov ? 'ready (' + esc(prov.name) + ')' : aiTools.checked ? 'no AI provider in this view; fixed checks only' : 'checking…') + '</b></p>';
     h += '<label class="row"><input type="checkbox" id="aitoggle" data-bind="aitoggle"' + (S.aiEnabled ? ' checked' : '') + (can('settings') ? '' : ' disabled') + '> Let the AI judge sentences the fixed rules cannot</label>' + (can('settings') ? '' : '<p class="small muted">Only an Admin can change this. Switch role at the top.</p>');
     h += '<label class="f2">Provider<select id="prov" data-bind="prov"' + (can('settings') ? '' : ' disabled') + '><option value="auto"' + (S.provider === 'auto' ? ' selected' : '') + '>Automatic (Claude inside claude.ai, otherwise the BrandSentinel server)</option><option value="custom"' + (S.provider === 'custom' ? ' selected' : '') + '>My own OpenAI-compatible endpoint</option><option value="none"' + (S.provider === 'none' ? ' selected' : '') + '>None (fixed checks only)</option></select></label>';
     if (S.provider === 'custom') h += '<div class="stack"><input type="url" id="cu" data-bind="cu" placeholder="https://…/v1/chat/completions" value="' + esc(S.custom.url) + '"><input type="text" id="cm" data-bind="cm" placeholder="Model name" value="' + esc(S.custom.model) + '"><input type="password" id="ck" data-bind="ck" placeholder="API key (stays in this browser)" value="' + esc(S.custom.key) + '"><p class="small muted">The browser calls your endpoint directly, so it must allow cross-origin requests. A server-side proxy is planned for Round 3.</p></div>';
@@ -1684,10 +1753,11 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
     const y = window.scrollY, app = document.getElementById('app'); if (!app) return;
     const waiting = state.subs.filter((s) => (role() === 'legal' && s.status === 'awaiting_specialist') || (role() === 'brand_manager' && s.status === 'awaiting_manager')).length;
     const tabs = [['review', 'Review'], ['queue', 'Queue'], ['sources', 'Source library'], ['insights', 'Insights'], ['trust', 'Trust and AI']];
+    if (SERVER_ON) tabs.push(['account', 'Account']);
     let h = '<header class="bar"><div class="wrap"><div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3l11 4v8c0 7-4.5 12-11 14C9.500 27 5 22 5 15V7z" fill="var(--ink)"/><path d="M11 16l4 4 7-8" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>BrandSentinel</div>'
       + '<div class="who">' + whoHtml() + '<button class="btn small" data-a="theme" aria-label="Switch light and dark theme">Theme</button></div></div>'
       + '<div class="wrap tabs" role="tablist">' + tabs.map((t) => '<button class="tab" ' + (state.view === t[0] ? 'aria-current="page"' : '') + ' data-a="nav" data-v="' + t[0] + '">' + t[1] + (t[0] === 'queue' && waiting ? '<span class="n">' + waiting + '</span>' : '') + '</button>').join('') + '</div></header><main class="wrap">';
-    h += state.view === 'review' ? reviewView() : state.view === 'queue' ? queueView() : state.view === 'sources' ? sourcesView() : state.view === 'insights' ? insightsView() : trustView();
+    h += state.view === 'review' ? reviewView() : state.view === 'queue' ? queueView() : state.view === 'sources' ? sourcesView() : state.view === 'insights' ? insightsView() : state.view === 'account' ? accountView() : trustView();
     app.innerHTML = h + '</main>'; window.scrollTo(0, y);
   }
 
@@ -1695,7 +1765,9 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
   const find = (id) => state.work.findings.find((f) => f.id === id);
   function bump(what) { state.sources.version++; state.changelog.push({ v: state.sources.version, what, by: user().name, at: new Date().toISOString() }); save(); render(); }
   const actions = {
-    nav(el) { state.view = el.dataset.v; state.ui.open = null; save(); render(); if (state.view === 'queue' && signedIn()) loadServerSubs(true).then(() => render()); },
+    nav(el) { state.view = el.dataset.v; state.ui.open = null; save(); render(); if (state.view === 'queue' && signedIn()) loadServerSubs(true).then(() => render());
+      if (state.view === 'account' && signedIn()) loadWorkspace().then(() => render()); },
+    openauth() { state.view = 'account'; state.ui.open = null; render(); },
     refresh() { return loadServerSubs(false).then((ok) => { render(); if (ok) toast('Queue refreshed from the server.'); }); },
     theme() { const r = document.documentElement; const dark = r.getAttribute('data-theme') === 'dark' || (!r.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches); r.setAttribute('data-theme', dark ? 'light' : 'dark'); },
     mode(el) { state.work.mode = el.dataset.v; state.work.checked = false; state.work.findings = []; state.work.editing = true; render(); },
@@ -1804,12 +1876,13 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
     } else if (b === 'islogo') { w.isLogo = t.checked; save(); }
     else if (b === 'usecontrast') { w.useContrast = t.checked; save(); }
     else if (b === 'fg') { w.fg = t.value; save(); } else if (b === 'bg') { w.bg = t.value; save(); }
+    else if (b === 'wsai') { setWsAi(t.checked); }
     else if (b === 'aitoggle') { state.settings.aiEnabled = t.checked; save(); render(); }
     else if (b === 'prov') { state.settings.provider = t.value; save(); render(); }
     else if (b === 'factdate') { const f = state.sources.facts.find((x) => x.id === t.dataset.id); f.validUntil = t.value; bump('Changed valid-until of ' + f.id + ' to ' + (t.value || 'no end date')); }
   });
   document.addEventListener('submit', (e) => {
-    const k = e.target.dataset && e.target.dataset.form; if (!k) return; e.preventDefault(); const S = state.sources, $ = (id) => document.getElementById(id).value.trim();
+    const k = e.target.dataset && e.target.dataset.form; if (!k) return; e.preventDefault(); if (k === 'login' || k === 'signup' || k === 'member') return handleAccountForm(k); const S = state.sources, $ = (id) => document.getElementById(id).value.trim();
     if (k === 'fact') { const id = 'F-' + String(S.facts.length + 1).padStart(2, '0') + uid('').slice(-1); S.facts.push({ id, text: $('nf-text'), evidence: $('nf-ev'), validUntil: document.getElementById('nf-until').value }); bump('Added fact ' + id); }
     else if (k === 'term') { const id = 'T-' + String(S.terms.length + 1).padStart(2, '0') + uid('').slice(-1); S.terms.push({ id, avoid: $('nt-avoid'), prefer: $('nt-prefer'), reason: $('nt-why'), severity: 'medium', source: S.name }); bump('Added term ' + id); }
     else if (k === 'colour') { S.palette.push({ name: $('nc-name'), hex: document.getElementById('nc-hex').value.toUpperCase() }); bump('Added colour'); }

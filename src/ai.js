@@ -129,14 +129,15 @@
       },
     };
   }
-   /* Sends the (already redacted) prompt to the BrandSentinel server, which holds the API key. */
+  /* Sends the (already redacted) prompt to the BrandSentinel server, which holds the API key. */
   function serverProvider(cfg, fetchImpl) {
     const f = fetchImpl || (typeof fetch !== 'undefined' ? fetch : null);
     const base = String(cfg.url || '').replace(/\/+$/, '');
     return {
       name: (cfg.model || 'AI model') + ' via BrandSentinel server',
       call: async (prompt) => {
-        const res = await f(base + '/api/ai-complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
+        const tok = typeof cfg.token === 'function' ? cfg.token() : cfg.token;
+        const res = await f(base + '/api/ai-complete', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, tok ? { Authorization: 'Bearer ' + tok } : {}), body: JSON.stringify({ prompt }) });
         if (!res.ok) throw new Error('AI server answered ' + res.status);
         return await res.json();
       },

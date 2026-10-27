@@ -6,14 +6,20 @@ import contextlib
 import os
 import sqlite3
 import threading
+from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+DEMO_WS = "ws-demo"
 SCHEMA = [
+    "CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, ai_enabled INTEGER NOT NULL DEFAULT 1, "
+    "is_demo INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
     "CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL)",
     "CREATE TABLE IF NOT EXISTS submissions (id TEXT PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL, author_id TEXT NOT NULL, "
     "needs_legal INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
     "CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, submission_id TEXT NOT NULL, at TEXT NOT NULL, actor_id TEXT NOT NULL, kind TEXT NOT NULL, detail TEXT NOT NULL)",
 ]
+# Columns added in Round 3. Older databases get them through ALTER TABLE, so nothing has to be recreated.
+NEW_COLUMNS = [("users", "email", "TEXT"), ("users", "pw_hash", "TEXT"), ("users", "workspace_id", "TEXT"), ("submissions", "workspace_id", "TEXT")]
 DEMO_USERS = [
     ("u-asha", "Asha Rao", "writer"), ("u-ravi", "Ravi Nair", "writer"), ("u-dev", "Dev Malhotra", "brand_manager"),
     ("u-meera", "Meera Iyer", "legal"), ("u-sam", "Sam Park", "admin"),
@@ -62,6 +68,25 @@ class Conn:
         return r[0] if r else None
 
 
+def _migrate(c: Conn) -> None:
+    for table, col, typ in NEW_COLUMNS:
+        if c.pg:
+            c.run("ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s" % (table, col, typ))
+        else:
+            have = {r["name"] for r in c.rows("PRAGMA table_info(%s)" % table)}
+            if col not in have:
+                c.run("ALTER TABLE %s ADD COLUMN %s %s" % (table, col, typ))
+    c.run("CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users (email)")
+    c.run("CREATE INDEX IF NOT EXISTS submissions_ws ON submissions (workspace_id)")
+    # Everything that existed before workspaces belongs to the shared demo workspace.
+    t = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    c.run("INSERT INTO workspaces (id, name, ai_enabled, is_demo, created_at) VALUES (?, 'Demo workspace', 1, 1, ?) ON CONFLICT (id) DO NOTHING", (DEMO_WS, t))
+    for uid, name, role in DEMO_USERS:
+        c.run("INSERT INTO users (id, name, role) VALUES (?, ?, ?) ON CONFLICT (id) DO NOTHING", (uid, name, role))
+        c.run("UPDATE users SET workspace_id = ? WHERE id = ? AND workspace_id IS NULL", (DEMO_WS, uid))
+    c.run("UPDATE submissions SET workspace_id = ? WHERE workspace_id IS NULL", (DEMO_WS,))
+
+
 @contextlib.contextmanager
 def connect():
     u = url()
@@ -80,8 +105,7 @@ def connect():
             if key not in _ready:
                 for stmt in SCHEMA:
                     c.run(stmt)
-                for uid, name, role in DEMO_USERS:
-                    c.run("INSERT INTO users (id, name, role) VALUES (?, ?, ?) ON CONFLICT (id) DO NOTHING", (uid, name, role))
+                _migrate(c)
                 raw.commit()
                 _ready.add(key)
         yield c
