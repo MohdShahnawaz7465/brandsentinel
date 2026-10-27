@@ -1058,7 +1058,7 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
   return { diffWords, STATUS, can, validateSubmit, transition, insights, openCount, needsSpecialist };
 });
 
-/* File helpers: .docx text extraction (with image alt text) and dominant colours of an image. */
+/* File helpers: .docx text extraction (with image alt text), dominant colours of an image, and helpers for PDF and OCR text. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.BSFiles = factory();
@@ -1105,9 +1105,48 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
     return [...buckets.values()].sort((a, b) => b.n - a.n).slice(0, topN || 4)
       .map((e) => ({ hex: ('#' + hex(e.r / e.n) + hex(e.g / e.n) + hex(e.b / e.n)).toUpperCase(), share: total ? e.n / total : 0 }));
   }
-  return { docxXmlToText, readDocx, dominantColours, decode };
+  /* ---------- PDFs and images with text (read in the browser; see app.js for the loaders) ---------- */
+  /* items: the text pieces pdf.js returns for one page ({ str, hasEOL }). Returns the page as plain lines. */
+  function pdfItemsToText(items) {
+    let out = '';
+    for (const it of items || []) {
+      if (!it || typeof it.str !== 'string') continue;
+      out += it.str + (it.hasEOL ? '\n' : ' ');
+    }
+    return out.split('\n').map((l) => l.replace(/[ \t\u00a0]+/g, ' ').trim()).filter(Boolean).join('\n');
+  }
+  /* OCR output is noisy: tidy line endings, drop lines with no letters or digits, and collapse blank runs. */
+  function cleanOcrText(text) {
+    const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n').map((l) => l.replace(/[ \t\u00a0]+/g, ' ').trim());
+    const out = []; let cur = '';
+    for (const l of lines) {
+      if (!/[A-Za-z0-9\u00c0-\u024f\u0900-\u097f]/.test(l)) { if (cur) out.push(cur); cur = ''; continue; }
+      // A line that stops without a full stop and is followed by a lowercase line is one wrapped sentence.
+      if (cur && !/[.!?:\u0964]["')\]]*$/.test(cur) && /^[a-z]/.test(l)) cur += ' ' + l;
+      else { if (cur) out.push(cur); cur = l; }
+    }
+    if (cur) out.push(cur);
+    return out.join('\n');
+  }
+  /* pages: [{ label, text }]. Joins them with a blank line and remembers where each page starts, so a finding
+     can say which page it came from. */
+  function joinPages(pages) {
+    let text = ''; const map = [];
+    for (const p of pages) {
+      const t = (p.text || '').trim(); if (!t) continue;
+      if (text) text += '\n\n';
+      map.push({ label: p.label, start: text.length, end: text.length + t.length });
+      text += t;
+    }
+    return { text, pageMap: map };
+  }
+  function pageOfOffset(pageMap, offset) {
+    if (!Array.isArray(pageMap) || typeof offset !== 'number' || offset < 0) return '';
+    const hit = pageMap.find((p) => offset >= p.start && offset <= p.end);
+    return hit ? hit.label : '';
+  }
+  return { docxXmlToText, readDocx, dominantColours, decode, pdfItemsToText, cleanOcrText, joinPages, pageOfOffset };
 });
-
 /* BrandSentinel app shell. State lives in the browser (localStorage). Engine, AI adapter and workflow logic are separate, tested modules. */
 (function () {
   'use strict';
@@ -1120,7 +1159,7 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
   const CAT = { terminology: 'Terminology', tone: 'Tone', claim: 'Claim', readability: 'Readability', accessibility: 'Accessibility', visual: 'Visual', confidentiality: 'Confidentiality', messaging: 'Messaging' };
 
   /* ---------- state ---------- */
-  const blankWork = () => ({ subId: null, title: '', text: '', mode: 'text', alt: '', isLogo: false, useContrast: false, fg: '#767676', bg: '#FFFFFF', imageInfo: null, imageUrl: '', findings: [], verified: [], ai: [], receipt: null, checked: false, editing: true, stats: null });
+  const blankWork = () => ({ subId: null, title: '', text: '', mode: 'text', alt: '', isLogo: false, useContrast: false, fg: '#767676', bg: '#FFFFFF', imageInfo: null, imageUrl: '', findings: [], verified: [], ai: [], receipt: null, checked: false, editing: true, stats: null, pageMap: null, pageText: '', sourceNote: '' });
   let state = load();
   const API_URL = (typeof window !== 'undefined' && window.BS_API_URL) || 'http://127.0.0.1:8000';
   let aiTools = { sample: null, server: null, checked: false };
@@ -1416,6 +1455,55 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
     } catch (e) { aiTools.server = null; }
     aiTools.checked = true; render();
   }
+  /* ---------- reading PDFs and images with text. Everything happens inside this browser: the file is never uploaded.
+     Only the reader code (and, for pictures, the English language data) is downloaded from a public CDN, the first time it is needed. ---------- */
+  const libs = {};
+  const loadScript = (url) => libs[url] || (libs[url] = new Promise((resolve, reject) => {
+    const el = document.createElement('script'); el.src = url; el.onload = resolve;
+    el.onerror = () => { delete libs[url]; reject(new Error('Could not download the file reader. Check your internet connection and try again.')); };
+    document.head.appendChild(el);
+  }));
+  const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+  const TESS = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+  const MAX_FILE = 15 * 1024 * 1024, MAX_PDF_PAGES = 30, MAX_OCR_PAGES = 5;
+  function say(msg) { busy = msg; const el = document.querySelector('[aria-live="polite"]'); if (el) el.textContent = msg; }
+  async function ocrAll(images, label) {
+    await loadScript(TESS);
+    const worker = await window.Tesseract.createWorker('eng', 1, { logger: (m) => { if (m.status === 'recognizing text') say('Reading the text in ' + label + '… ' + Math.round((m.progress || 0) * 100) + '%'); } });
+    try {
+      const out = [];
+      for (const img of images) out.push(F.cleanOcrText((await worker.recognize(img)).data.text));
+      return out;
+    } finally { await worker.terminate(); }
+  }
+  async function readPdf(file) {
+    await loadScript(PDFJS + 'pdf.min.js'); const lib = window.pdfjsLib; lib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js';
+    const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+    const n = Math.min(doc.numPages, MAX_PDF_PAGES); let pages = [];
+    for (let i = 1; i <= n; i++) { say('Reading page ' + i + ' of ' + n + '…'); const pg = await doc.getPage(i); pages.push({ label: 'Page ' + i, text: F.pdfItemsToText((await pg.getTextContent()).items) }); }
+    let usedOcr = false, read = n;
+    if (pages.reduce((a, p) => a + p.text.length, 0) < 20 * n) { // almost no text: a scanned PDF, so read the pictures of its pages instead
+      usedOcr = true; read = Math.min(doc.numPages, MAX_OCR_PAGES); const canvases = [];
+      for (let i = 1; i <= read; i++) {
+        say('Preparing page ' + i + ' of ' + read + '…'); const pg = await doc.getPage(i), vp = pg.getViewport({ scale: 2 }), c = document.createElement('canvas');
+        c.width = vp.width; c.height = vp.height; await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise; canvases.push(c);
+      }
+      pages = (await ocrAll(canvases, 'the scanned pages')).map((t, i) => ({ label: 'Page ' + (i + 1), text: t }));
+    }
+    const j = F.joinPages(pages);
+    if (!j.text) throw new Error('No readable text was found in this PDF.');
+    return Object.assign(j, { usedOcr, total: doc.numPages, read });
+  }
+  async function readImageText(file) {
+    const j = F.joinPages([{ label: 'Image', text: (await ocrAll([file], 'the image'))[0] }]);
+    if (!j.text) throw new Error('No readable text was found in this image.');
+    return j;
+  }
+  const pageOf = (f) => {
+    const w = state.work; if (!w.pageMap || !f) return '';
+    if (w.text === w.pageText && f.start >= 0) return F.pageOfOffset(w.pageMap, f.start);
+    const i = f.quote ? (w.pageText || '').indexOf(f.quote) : -1; return i < 0 ? '' : F.pageOfOffset(w.pageMap, i);
+  };
   const aiOnHere = () => !!state.settings.aiEnabled && !(signedIn() && auth.workspace && auth.workspace.aiEnabled === false);
   function getProvider() {
     const c = state.settings.custom;
@@ -1533,6 +1621,7 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
       f.origin === 'ai' ? '<span class="pill ai" title="Suggested by an AI model, checked against a real source">AI-assisted</span>' : '',
       f.unverified ? '<span class="pill warn">Unverified, needs human review</span>' : '',
       f.needsSpecialist ? '<span class="pill plain">Goes to Legal</span>' : '',
+      pageOf(f) ? '<span class="pill plain" title="Where this was found in your file">' + esc(pageOf(f)) + '</span>' : '',
       f.status === 'disputed' ? '<span class="pill ok">Disputed</span>' : '',
     ].join('');
     let h = '<article class="f ' + f.severity + (f.status === 'disputed' ? ' disputed' : '') + '" id="card-' + f.id + '"><div class="head">' + badges + '</div>';
@@ -1593,7 +1682,8 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
     h += '<label class="f2">Title<input type="text" id="title" data-bind="title" value="' + esc(w.title) + '" placeholder="e.g. Autumn launch email"></label>';
     if (w.mode === 'text') {
       h += '<div class="row"><label class="f2 grow">Try a sample<select id="sample" data-bind="sample"><option value="">Choose a sample draft…</option>' + D.samples.map((x) => '<option value="' + x.id + '">' + esc(x.label) + '</option>').join('') + '</select></label>'
-        + '<label class="f2">Or upload<input type="file" id="file" data-bind="file" accept=".docx,.txt,.md"></label></div>';
+        + '<label class="f2">Or upload<input type="file" id="file" data-bind="file" accept=".docx,.pdf,.txt,.md,image/*"></label></div>'
+        + '<p class="small muted">Word, PDF, text, or a picture with text in it. PDFs and pictures are read inside your browser, so the file is not uploaded.</p>' + (w.sourceNote ? '<p class="small"><b>' + esc(w.sourceNote) + '</b></p>' : '');
       if (w.checked && !w.editing) {
         h += '<div class="doc" id="doc" aria-label="Your draft with findings marked">' + annotated(w.text, w.findings) + '</div><div class="row"><button class="btn" data-a="edit">Edit text</button><span class="small muted">Tap a highlighted phrase to jump to its finding.</span></div>';
       } else {
@@ -1863,9 +1953,19 @@ label.f2 { display: flex; flex-direction: column; gap: 4px; font-size: 13px; fon
       const f = t.files[0]; if (!f) return;
       try {
         let text;
-        if (/\.docx$/i.test(f.name)) { if (!window.JSZip) throw new Error('The Word reader could not load.'); text = await F.readDocx(window.JSZip, await f.arrayBuffer()); } else text = await f.text();
-        state.work = Object.assign(blankWork(), { title: f.name.replace(/\.[^.]+$/, ''), text }); save(); render(); toast('Loaded ' + f.name);
-      } catch (err) { toast(err.message || 'Could not read that file.'); }
+        let pageMap = null, sourceNote = '';
+        if (/\.docx$/i.test(f.name)) { if (!window.JSZip) throw new Error('The Word reader could not load.'); text = await F.readDocx(window.JSZip, await f.arrayBuffer()); }
+        else if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') {
+          say('Reading ' + f.name + '… the first time, the reader has to download (a few seconds).'); render();
+          const r = await readPdf(f); text = r.text; pageMap = r.pageMap;
+          sourceNote = 'Read from ' + f.name + ' (' + r.read + (r.read === 1 ? ' page' : ' pages') + (r.read < r.total ? ' of ' + r.total : '') + (r.usedOcr ? ', scanned, so the text was recognised from pictures and may contain mistakes' : '') + '). Check the text before you run the check.';
+        } else if (/^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name)) {
+          say('Reading the text in ' + f.name + '… the first time takes 10 to 20 seconds while the reader downloads.'); render();
+          const r = await readImageText(f); text = r.text; pageMap = r.pageMap;
+          sourceNote = 'Text recognised from ' + f.name + '. Recognised text can contain mistakes, so check it before you run the check.';
+        } else text = await f.text();
+        busy = ''; state.work = Object.assign(blankWork(), { title: f.name.replace(/\.[^.]+$/, ''), text, pageMap, pageText: pageMap ? text : '', sourceNote }); save(); render(); toast('Loaded ' + f.name);
+      } catch (err) { busy = ''; render(); toast(err.message || 'Could not read that file.'); }
     } else if (b === 'img') {
       const f = t.files[0]; if (!f) return;
       const url = URL.createObjectURL(f), img = new Image();

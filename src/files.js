@@ -1,4 +1,4 @@
-/* File helpers: .docx text extraction (with image alt text) and dominant colours of an image. */
+/* File helpers: .docx text extraction (with image alt text), dominant colours of an image, and helpers for PDF and OCR text. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.BSFiles = factory();
@@ -45,5 +45,45 @@
     return [...buckets.values()].sort((a, b) => b.n - a.n).slice(0, topN || 4)
       .map((e) => ({ hex: ('#' + hex(e.r / e.n) + hex(e.g / e.n) + hex(e.b / e.n)).toUpperCase(), share: total ? e.n / total : 0 }));
   }
-  return { docxXmlToText, readDocx, dominantColours, decode };
+  /* ---------- PDFs and images with text (read in the browser; see app.js for the loaders) ---------- */
+  /* items: the text pieces pdf.js returns for one page ({ str, hasEOL }). Returns the page as plain lines. */
+  function pdfItemsToText(items) {
+    let out = '';
+    for (const it of items || []) {
+      if (!it || typeof it.str !== 'string') continue;
+      out += it.str + (it.hasEOL ? '\n' : ' ');
+    }
+    return out.split('\n').map((l) => l.replace(/[ \t\u00a0]+/g, ' ').trim()).filter(Boolean).join('\n');
+  }
+  /* OCR output is noisy: tidy line endings, drop lines with no letters or digits, and collapse blank runs. */
+  function cleanOcrText(text) {
+    const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n').map((l) => l.replace(/[ \t\u00a0]+/g, ' ').trim());
+    const out = []; let cur = '';
+    for (const l of lines) {
+      if (!/[A-Za-z0-9\u00c0-\u024f\u0900-\u097f]/.test(l)) { if (cur) out.push(cur); cur = ''; continue; }
+      // A line that stops without a full stop and is followed by a lowercase line is one wrapped sentence.
+      if (cur && !/[.!?:\u0964]["')\]]*$/.test(cur) && /^[a-z]/.test(l)) cur += ' ' + l;
+      else { if (cur) out.push(cur); cur = l; }
+    }
+    if (cur) out.push(cur);
+    return out.join('\n');
+  }
+  /* pages: [{ label, text }]. Joins them with a blank line and remembers where each page starts, so a finding
+     can say which page it came from. */
+  function joinPages(pages) {
+    let text = ''; const map = [];
+    for (const p of pages) {
+      const t = (p.text || '').trim(); if (!t) continue;
+      if (text) text += '\n\n';
+      map.push({ label: p.label, start: text.length, end: text.length + t.length });
+      text += t;
+    }
+    return { text, pageMap: map };
+  }
+  function pageOfOffset(pageMap, offset) {
+    if (!Array.isArray(pageMap) || typeof offset !== 'number' || offset < 0) return '';
+    const hit = pageMap.find((p) => offset >= p.start && offset <= p.end);
+    return hit ? hit.label : '';
+  }
+  return { docxXmlToText, readDocx, dominantColours, decode, pdfItemsToText, cleanOcrText, joinPages, pageOfOffset };
 });
