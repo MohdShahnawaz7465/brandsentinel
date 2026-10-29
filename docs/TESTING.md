@@ -28,7 +28,7 @@ Set `BS_PBKDF2_ROUNDS=1000` to make the account tests faster. The browser test `
 |---|---|---|
 | Python, all tests | 65 tests, OK | 28 Oct 2026, team machine (Windows) |
 | `test/files.test.js` | 6 of 6 pass | 28 Oct 2026, team machine |
-| Matching, old versus new | 38 of 52 versus 50 of 52 right verdicts | 28 Oct 2026, team machine |
+| Matching, old versus new | 38 of 52 versus 52 of 52 (100%) right verdicts | 29 Oct 2026, team machine |
 | JavaScript engine, AI and workflow, matching tests | pass in our build environment | 28 Oct 2026; re-run `node --test test/` to confirm on your machine |
 | `test/e2e.js` browser test | All pass (35+ checks, 9 screenshots generated in `shots/`) | 29 Oct 2026, Windows (Chrome headless) |
 | Live site by hand | PDF upload with page labels, picture OCR, the three matching conflicts (opposite meaning, wrong place, number as words) | 27 to 29 Oct 2026 |

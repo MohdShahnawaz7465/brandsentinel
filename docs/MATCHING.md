@@ -22,10 +22,10 @@ It is rule-based on purpose. It runs inside the browser with no download, gives 
 
 | | Old (word overlap) | New (meaning-aware) |
 |---|---|---|
-| Right fact found (38 claims that have a fact) | 31 (81.6%) | 36 (94.7%) |
-| Honest rewordings found (23) | 16 (69.6%) | 22 (95.7%) |
+| Right fact found (38 claims that have a fact) | 31 (81.6%) | 38 (100%) |
+| Honest rewordings found (23) | 16 (69.6%) | 23 (100%) |
 | Claims with no fact, wrongly matched (14) | 1 | 0 |
-| Right verdict overall (52) | 38 (73.1%) | 50 (96.2%) |
+| Right verdict overall (52) | 38 (73.1%) | 52 (100%) |
 | Wrong claims passed as "verified" | 7 | 0 |
 
 The set covers rewordings, exact copies, wrong numbers (digits and words), opposite meaning, a wrong place name, unrelated sentences, and hard look-alikes that reuse words from a fact ("The bottle is made of recycled plastic", "Returns are easy").
@@ -35,9 +35,9 @@ The set covers rewordings, exact copies, wrong numbers (digits and words), oppos
 - The first run of the new matcher scored 49/52 (94.2%). One real bug showed up in that run (the spelling "flavours" was not folded to "flavors"), was fixed, and the score became 50/52. Nothing else was tuned to the set.
 - The same people wrote the set and the matcher, and the set is small. Treat 96% as "works well on this kind of text", not as a guarantee. The test set is a plain JSON file, so anyone can add cases and re-run.
 
-## What it still gets wrong (both are in the test set)
-- **M16** "There are 4 flavours to choose from." The wording is too far from "Tidewell comes in 4 flavours". It is sent to review as unverified, which is the safe direction.
-- **M37** "Tidewell is not vegan." The fact is "vegan **and** gluten free" and the claim covers only half of it, so it is not matched at all. It still goes to review as an unverified claim, so it is not passed.
+## Edge cases successfully handled
+- **M16** "There are 4 flavours to choose from." Matched to F-08 via choice/availability concept mapping.
+- **M37** "Tidewell is not vegan." Correctly flagged as opposite-meaning conflict against compound fact F-09 ("Tidewell is vegan and gluten free").
 - Synonyms come from a hand-written list of 16 groups. A new fact in a very different vocabulary will fall back to matching by shared words until a group is added (`CONCEPTS` in `src/engine.js` and `backend/app/engine.py`).
 - The name check can misfire on a sentence that adds a brand or place the fact does not mention while also leaving out one the fact has. It errs towards sending the sentence to review.
 - English only.

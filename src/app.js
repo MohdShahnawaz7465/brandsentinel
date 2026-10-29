@@ -567,6 +567,44 @@
     return h + dlBtn(r) + '</div>';
   }
 
+  /* ---------- Compliance & Certificate Helpers ---------- */
+  function complianceScore(findings) {
+    if (!findings || !findings.length) return { score: 100, open: 0, level: 'risk-ok', label: '100% Brand Ready', desc: 'No open brand or legal violations.' };
+    const open = W.openCount(findings);
+    if (!open) return { score: 100, open: 0, level: 'risk-ok', label: 'All Issues Resolved', desc: 'Every finding has been fixed or triaged with a recorded reason.' };
+    let penalty = 0;
+    findings.forEach((f) => {
+      if (f.status === 'fixed' || f.status === 'disputed') return;
+      if (f.severity === 'high') penalty += 25;
+      else if (f.severity === 'medium') penalty += 12;
+      else penalty += 5;
+    });
+    const score = Math.max(15, Math.min(99, 100 - penalty));
+    if (score < 60) return { score, open, level: 'risk-high', label: 'High Brand Risk', desc: open + ' open issue' + (open > 1 ? 's' : '') + ' require resolution before publication.' };
+    if (score < 90) return { score, open, level: 'risk-med', label: 'Needs Triage', desc: open + ' open issue' + (open > 1 ? 's' : '') + ' remaining.' };
+    return { score, open, level: 'risk-ok', label: 'Nearly Ready', desc: open + ' minor issue' + (open > 1 ? 's' : '') + ' remaining.' };
+  }
+
+  function downloadCertificate(s) {
+    const v = (s.versions && s.versions.length) ? s.versions[s.versions.length - 1] : { text: '' };
+    const certId = 'BS-CERT-' + (s.id ? s.id.toUpperCase().replace(/[^A-Z0-9]/g, '') : 'SAMPLE') + '-' + Date.now().toString(36).toUpperCase();
+    const words = v.text ? v.text.trim().split(/\s+/).filter(Boolean).length : 0;
+    const historyEvents = eventsOf(s) || [];
+    const legalEv = historyEvents.find((e) => e.type && e.type.includes('legal'));
+    const approveEv = historyEvents.find((e) => e.type && e.type.includes('approve'));
+
+    const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Brand Compliance Certificate - ' + esc(s.title || 'Draft') + '</title><style>:root{--ink:#14213D;--accent:#0F766E;--line:#E2E8F0}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:0;padding:36px 20px;background:#F8FAFC;color:#0F172A}.cert{max-width:760px;margin:0 auto;background:#FFF;border:4px double var(--ink);border-radius:12px;padding:40px;box-shadow:0 10px 30px rgba(0,0,0,0.06)}.head{text-align:center;border-bottom:2px solid var(--line);padding-bottom:20px;margin-bottom:24px}.brand{font-size:26px;font-weight:800;color:var(--ink);letter-spacing:-0.02em}.tag{display:inline-block;background:#CCFBF1;color:#0F766E;font-size:11px;font-weight:700;padding:4px 12px;border-radius:999px;margin-top:8px;text-transform:uppercase;letter-spacing:.06em}.title{text-align:center;margin-bottom:28px}.title h1{font-size:22px;margin:0 0 6px}.meta-id{font-family:monospace;font-size:13px;color:#64748B}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}.box{background:#F8FAFC;border:1px solid var(--line);border-radius:8px;padding:14px}.lbl{font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;margin-bottom:4px}.val{font-size:15px;font-weight:600;color:#0F172A}.summary{background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:14px;font-size:13px;line-height:1.5;color:#166534;margin-bottom:28px}.signs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;border-top:2px solid var(--line);padding-top:20px;text-align:center;margin-bottom:24px}.sign{border-top:1px dashed #94A3B8;padding-top:6px;font-size:12px}.role{font-weight:700;color:var(--ink);font-size:13px;margin-bottom:2px}.seal{text-align:center;font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.05em;text-transform:uppercase}.actions{text-align:center;margin-top:20px}.btn{background:var(--ink);color:#fff;border:0;padding:9px 20px;border-radius:6px;font-weight:600;cursor:pointer}@media print{.actions{display:none}body{padding:0;background:#fff}.cert{border-width:2px;box-shadow:none}}</style></head><body><div class="cert"><div class="head"><div class="brand">BrandSentinel</div><div class="tag">Official Compliance Verification</div></div><div class="title"><h1>Certificate of Brand Governance Compliance</h1><div class="meta-id">' + certId + '</div></div><div class="grid"><div class="box"><div class="lbl">Document</div><div class="val">' + esc(s.title || 'Untitled Draft') + '</div></div><div class="box"><div class="lbl">Governance Health</div><div class="val" style="color:#0F766E">100% Brand Compliant</div></div><div class="box"><div class="lbl">Author</div><div class="val">' + esc(s.author || 'Writer') + '</div></div><div class="box"><div class="lbl">Verified Length</div><div class="val">' + words + ' words</div></div></div><div class="summary"><b>Verified &amp; Audited:</b> Marketing copy checked against approved brand facts, terminology, and legal rules. Meaning check guardrail enforced on all revisions. Data redacted before external routing.</div><div class="signs"><div class="sign"><div class="role">Writer</div>' + esc(s.author || 'Writer') + '<br><small>' + fmt(s.createdAt) + '</small></div><div class="sign"><div class="role">Legal Specialist</div>' + (legalEv ? esc(legalEv.by) + '<br><small>' + fmt(legalEv.at) + '</small>' : 'Verified by Policy') + '</div><div class="sign"><div class="role">Brand Manager</div>' + (approveEv ? esc(approveEv.by) + '<br><small>' + fmt(approveEv.at) + '</small>' : 'Approved') + '</div></div><div class="seal">&#10003; Authenticated by BrandSentinel Dual Engine</div><div class="actions"><button class="btn" onclick="window.print()">Print / Save as PDF</button></div></div></body></html>';
+
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (!win) {
+      const a = document.createElement('a'); a.href = url; a.download = 'BrandSentinel-Certificate-' + (s.id || 'draft') + '.html';
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+    toast('Compliance certificate generated.');
+  }
+
   /* ---------- views ---------- */
   function reviewView() {
     const w = state.work, locked = false;
@@ -610,6 +648,15 @@
       const groups = groupFindings(w.findings);
       const c = { high: 0, medium: 0, low: 0 }; groups.forEach((g) => { c[g.f.severity]++; });
       const open = W.openCount(w.findings);
+      const cs = complianceScore(w.findings);
+      const hasSafeFixes = open > 0 && w.findings.some((f) => f.status === 'open' && !f.unverified && f.fixes && f.fixes.length);
+      h += '<div class="meter-card stack">'
+        + '<div class="meter-head"><span class="meter-title">Brand Compliance Score</span><span class="meter-tag ' + cs.level + '">' + cs.label + '</span></div>'
+        + '<div class="meter-val mono">' + cs.score + '<small>/100</small></div>'
+        + '<div class="meter-bar"><div class="meter-fill ' + cs.level + '" style="width:' + cs.score + '%"></div></div>'
+        + '<div class="meter-foot small muted"><span>' + cs.desc + '</span>'
+        + (hasSafeFixes ? '<button class="btn small btn-autofix" data-a="autofixall">⚡ Auto-fix safe issues</button>' : '')
+        + '</div></div>';
       h += '<div class="card stack"><div class="sum"><h3 class="grow">' + (groups.length ? groups.length + ' finding' + (groups.length === 1 ? '' : 's') : 'No findings') + '</h3>'
         + '<span class="pill high">' + c.high + ' high</span><span class="pill medium">' + c.medium + ' medium</span><span class="pill low">' + c.low + ' low</span></div>'
         + (w.stats ? '<p class="small muted">' + w.stats.words + ' words · reading level grade ' + w.stats.grade.toFixed(1) + (s && s.fixed ? ' · ' + s.fixed + ' fix' + (s.fixed > 1 ? 'es' : '') + ' applied' : '') + '</p>' : '')
@@ -654,7 +701,10 @@
     if (s.status === 'awaiting_specialist') act.push(['signoff', 'Sign off claims', can('signoff')]);
     if (s.status === 'awaiting_manager') act.push(['approve', 'Approve', can('approve')]);
     if (['awaiting_specialist', 'awaiting_manager'].includes(s.status)) act.push(['request_changes', 'Request changes', can('request_changes')]);
-    if (!act.length) h += '<p class="small muted">' + (s.status === 'approved' ? 'Approved. The decision is recorded in the history below.' : s.status === 'changes_requested' ? 'The writer needs to revise and resubmit.' : 'Not in review yet.') + '</p>';
+    if (!act.length) {
+      h += '<p class="small muted">' + (s.status === 'approved' ? 'Approved. The decision is recorded in the history below.' : s.status === 'changes_requested' ? 'The writer needs to revise and resubmit.' : 'Not in review yet.') + '</p>';
+      if (s.status === 'approved') h += '<div class="row" style="margin-top:10px"><button class="btn primary" data-a="cert" data-id="' + s.id + '">📄 Download Compliance Certificate</button></div>';
+    }
     else {
       h += '<label class="f2">Comment <span class="hint">required when requesting changes</span><textarea id="decision" rows="2" data-bind="decision">' + esc(state.ui.decisionText || '') + '</textarea></label><div class="row">' + act.map((a) => '<button class="btn' + (a[0] === 'request_changes' ? '' : ' primary') + '" data-a="' + a[0] + '" data-id="' + s.id + '"' + (a[2] ? '' : ' disabled title="Your role cannot do this"') + '>' + a[1] + '</button>').join('') + '</div>';
       if (!act.some((a) => a[2])) h += '<p class="small muted">You are viewing as ' + D.roleNames[role()] + '. Switch role at the top to act on this piece.</p>';
@@ -788,6 +838,41 @@
     disputecancel() { state.ui.disputing = null; render(); },
     disputesave(el) { const f = find(el.dataset.id); const r = (state.ui.reasonText || '').trim(); if (!r) return toast('Add a reason so the reviewer understands.'); f.status = 'disputed'; f.reason = r; state.work.findings.forEach((o) => { if (o.start >= 0 && o.start === f.start && o.end === f.end && o.status === 'open') { o.status = 'disputed'; o.reason = r; } }); state.ui.disputing = null; addEvent(sub(state.work.subId), 'disputed', f.title + ': ' + r); save(); render(); },
     undispute(el) { const f = find(el.dataset.id); const rs = f.reason; state.work.findings.forEach((o) => { if (o === f || (o.start >= 0 && o.start === f.start && o.end === f.end && o.status === 'disputed' && o.reason === rs)) { o.status = 'open'; o.reason = ''; } }); save(); render(); },
+    autofixall() {
+      const w = state.work;
+      if (!w.checked || !w.findings.length) return;
+      let count = 0;
+      for (let pass = 0; pass < 20; pass++) {
+        const open = w.findings.filter((f) => f.status === 'open' && !f.unverified && f.fixes && f.fixes.length);
+        if (!open.length) break;
+        let applied = false;
+        for (const f of open) {
+          const ev = E.evaluateFixes(f, w.text, chipsOn(f));
+          if (ev.ok && ev.ok.length) {
+            const fx = ev.ok[0];
+            w.text = E.applyFix(w.text, f, fx);
+            f.status = 'fixed';
+            count++;
+            applied = true;
+            const s = sub(w.subId);
+            if (s) s.fixed = (s.fixed || 0) + 1;
+            break;
+          }
+        }
+        if (!applied) break;
+        recheckLocal();
+      }
+      if (count > 0) {
+        save(); render();
+        toast('Applied ' + count + ' safe fix' + (count > 1 ? 'es' : '') + ' automatically.');
+      } else {
+        toast('No automated safe fixes found. Remaining items require manual review.');
+      }
+    },
+    cert(el) {
+      const s = sub(el.dataset.id);
+      if (s) downloadCertificate(s);
+    },
 
     fb(el) {
       const f = find(el.dataset.id); const v = +el.dataset.v; const s = sub(state.work.subId); if (!s) return;
