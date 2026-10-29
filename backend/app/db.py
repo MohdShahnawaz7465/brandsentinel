@@ -87,6 +87,32 @@ def _migrate(c: Conn) -> None:
     c.run("UPDATE submissions SET workspace_id = ? WHERE workspace_id IS NULL", (DEMO_WS,))
 
 
+def _already_current(c: Conn) -> bool:
+    """Hosted database: one quick check instead of ~20 setup statements on every cold start.
+    True when all tables, the Round 3 columns and the demo users already exist. Anything unexpected returns False,
+    and the full (safe to repeat) setup runs as before."""
+    if not c.pg:
+        return False
+    try:
+        cols = c.one(
+            "SELECT count(*) AS n FROM information_schema.columns WHERE table_schema = current_schema() AND "
+            "((table_name = 'users' AND column_name IN ('email', 'pw_hash', 'workspace_id')) OR "
+            "(table_name = 'submissions' AND column_name = 'workspace_id'))"
+        )
+        tabs = c.one(
+            "SELECT count(*) AS n FROM information_schema.tables WHERE table_schema = current_schema() AND "
+            "table_name IN ('workspaces', 'users', 'submissions', 'events')"
+        )
+        demo = c.one("SELECT count(*) AS n FROM users WHERE workspace_id = ? AND id IN ('u-asha','u-ravi','u-dev','u-meera','u-sam')", (DEMO_WS,))
+        return bool(cols and tabs and demo and int(cols["n"]) == 4 and int(tabs["n"]) == 4 and int(demo["n"]) == 5)
+    except Exception:
+        try:
+            c.raw.rollback()
+        except Exception:
+            pass
+        return False
+
+
 @contextlib.contextmanager
 def connect():
     u = url()
@@ -103,10 +129,11 @@ def connect():
     try:
         with _lock:
             if key not in _ready:
-                for stmt in SCHEMA:
-                    c.run(stmt)
-                _migrate(c)
-                raw.commit()
+                if not _already_current(c):
+                    for stmt in SCHEMA:
+                        c.run(stmt)
+                    _migrate(c)
+                    raw.commit()
                 _ready.add(key)
         yield c
         raw.commit()
