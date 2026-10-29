@@ -1,0 +1,30 @@
+/* Drafts that come from the server were written by other visitors, so treat them as untrusted:
+     keep only the fields the screens use and force every value to its expected type. */
+  const SEV = ['high', 'medium', 'low'];
+  const txt = (v, n) => String(v == null ? '' : v).slice(0, n || 2000);
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  const list = (v, n) => (Array.isArray(v) ? v.slice(0, n) : []);
+  function cleanReceipt(r) {
+    if (!r || typeof r !== 'object') return null;
+    return {
+      id: txt(r.id, 40), at: txt(r.at, 40), mode: r.mode === 'ai-assisted' ? 'ai-assisted' : 'rules-only', provider: txt(r.provider, 120), reason: txt(r.reason, 300), error: txt(r.error, 300), bytes: num(r.bytes), accepted: num(r.accepted),
+      sent: list(r.sent, 50).map((x) => ({ index: num(x && x.index), text: txt(x && x.text, 2000) })),
+      redactions: list(r.redactions, 10).map((x) => ({ kind: txt(x && x.kind, 20), count: num(x && x.count) })),
+      sourceIds: list(r.sourceIds, 50).map((x) => txt(x, 40)),
+      blocked: list(r.blocked, 50).map((b) => ({ title: txt(b && b.title, 200), reason: txt(b && b.reason, 300) })),
+    };
+  }
+  function cleanData(d) {
+    d = d && typeof d === 'object' ? d : {};
+    return {
+      versions: list(d.versions, 50).map((v, i) => ({ n: num(v && v.n) || i + 1, text: txt(v && v.text, 20000), at: txt(v && v.at, 40), by: txt(v && v.by, 80), note: txt(v && v.note, 300) })),
+      firstCheck: Array.isArray(d.firstCheck) ? d.firstCheck.slice(0, 200).map((f) => ({ ruleId: txt(f && f.ruleId, 60), category: txt(f && f.category, 30) })) : null,
+      final: list(d.final, 200).map((f) => ({ ruleId: txt(f && f.ruleId, 60), status: txt(f && f.status, 20), reason: txt(f && f.reason, 500) })),
+      finalFindings: list(d.finalFindings, 200).map((f) => ({ ruleId: txt(f && f.ruleId, 60), title: txt(f && f.title, 300), severity: SEV.includes(f && f.severity) ? f.severity : 'low', status: txt(f && f.status, 20), reason: txt(f && f.reason, 500), quote: txt(f && f.quote, 500), origin: txt(f && f.origin, 20) })),
+      feedback: list(d.feedback, 200).map((f) => ({ findingKey: txt(f && f.findingKey, 120), ruleId: txt(f && f.ruleId, 60), clear: !!(f && f.clear) })),
+      comments: list(d.comments, 100).map((c) => ({ by: txt(c && c.by, 80), at: txt(c && c.at, 40), text: txt(c && c.text, 1000) })),
+      events: list(d.events, 200).map((e) => ({ at: txt(e && e.at, 40), by: txt(e && e.by, 80), type: txt(e && e.type, 40), note: txt(e && e.note, 500) })),
+      receipts: list(d.receipts, 30).map(cleanReceipt).filter(Boolean),
+      fixed: num(d.fixed), needsLegal: !!d.needsLegal,
+    };
+  }
