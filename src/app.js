@@ -24,6 +24,10 @@
   let auth = { token: '', user: null, workspace: null, connecting: false };
   try { const a = JSON.parse(sessionStorage.getItem(AUTH_KEY) || 'null'); if (a && a.token && a.user) auth = { token: a.token, user: a.user, workspace: a.workspace || null, connecting: false }; } catch (e) { /* no session storage: stay logged out */ }
   const signedIn = () => !!(SERVER_ON && auth.token && auth.user);
+  /* First screen: when the server is connected and nobody is signed in, show the sign-in screen before the app. */
+  let entered = false; try { entered = sessionStorage.getItem('brandsentinel.entered') === '1'; } catch (e) { /* ignore */ }
+  const gateOn = () => SERVER_ON && !signedIn() && !entered;
+  const setEntered = (v) => { entered = v; try { if (v) sessionStorage.setItem('brandsentinel.entered', '1'); else sessionStorage.removeItem('brandsentinel.entered'); } catch (e) { /* ignore */ } };
   if (signedIn()) state.userId = auth.user.id;
   async function api(path, opts) {
     const o = opts || {}, ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 8000);
@@ -75,6 +79,7 @@
     const v = kind === 'login' ? { email: fval('li-email').trim(), password: fval('li-pw') }
       : kind === 'signup' ? { workspace_name: fval('su-ws').trim(), name: fval('su-name').trim(), email: fval('su-email').trim(), password: fval('su-pw') }
         : { name: fval('mb-name').trim(), email: fval('mb-email').trim(), role: fval('mb-role'), password: fval('mb-pw') };
+    if (kind === 'login' || kind === 'signup') gateVals = Object.assign({}, v, { password: '' }); // keep what was typed if the server says no
     accountBusy = true; render();
     try {
       if (kind === 'member') {
@@ -117,7 +122,46 @@
     } else if (!w.isDemo) h += '<p class="small muted">Ask your workspace admin to add people or change settings.</p>';
     return h + '</div>';
   }
+  let gateTab = 'login', gateVals = {};
+  const SHIELD = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3l11 4v8c0 7-4.5 12-11 14C9.500 27 5 22 5 15V7z" fill="var(--ink)"/><path d="M11 16l4 4 7-8" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  function gateHtml() {
+    const dis = (auth.connecting || accountBusy) ? ' disabled' : '';
+    const busyLabel = (t) => (accountBusy ? 'Please wait…' : t);
+    const signup = gateTab === 'signup';
+    const roles = [['writer', 'Writer'], ['legal', 'Legal'], ['brand_manager', 'Brand manager']];
+    const val = (k) => ' value="' + esc(gateVals[k] || '') + '"';
+    const form = signup
+      ? '<form data-form="signup" class="auth-form">'
+        + '<label class="f2">Workspace name<input type="text" id="su-ws" maxlength="80" placeholder="e.g. Tidewell Marketing" required' + val('workspace_name') + '></label>'
+        + '<label class="f2">Your name<input type="text" id="su-name" maxlength="80" autocomplete="name" required' + val('name') + '></label>'
+        + '<label class="f2">Work email<input type="email" id="su-email" autocomplete="username" placeholder="you@company.com" required' + val('email') + '></label>'
+        + '<label class="f2">Password <span class="hint">at least 8 characters</span><input type="password" id="su-pw" minlength="8" autocomplete="new-password" required></label>'
+        + '<button class="btn primary block" type="submit"' + dis + '>' + busyLabel('Create workspace') + '</button>'
+        + '<p class="small muted">You become the admin and add your team later. Only people in your workspace can see its drafts. Passwords are stored only as salted hashes.</p></form>'
+      : '<form data-form="login" class="auth-form">'
+        + '<label class="f2">Email<input type="email" id="li-email" autocomplete="username" placeholder="you@company.com" required' + val('email') + '></label>'
+        + '<label class="f2">Password<input type="password" id="li-pw" autocomplete="current-password" required></label>'
+        + '<button class="btn primary block" type="submit"' + dis + '>' + busyLabel('Log in') + '</button></form>';
+    return '<div class="auth-top"><button class="btn small" data-a="theme" aria-label="Switch light and dark theme">Theme</button></div>'
+      + '<div class="auth">'
+      + '<aside class="auth-side"><div class="brand">' + SHIELD + 'BrandSentinel</div>'
+      + '<h1>Brand copy, checked before it goes out.</h1>'
+      + '<p>Check a draft against your approved wording and facts. Legal sees only what needs sign-off, and you can see exactly what left your system.</p>'
+      + '<ul><li>Fixed brand rules run first. The AI only judges what rules cannot.</li><li>Claims are matched to approved facts, and wrong numbers or opposite meanings are caught.</li><li>Reads Word, PDF and pictures with text, right in your browser.</li><li>Writer, Legal and Brand manager each have their own step.</li></ul>'
+      + '<p class="small">Tidewell, the brand in the demo, is made up.</p></aside>'
+      + '<section class="auth-main"><div class="auth-box">'
+      + '<h2>' + (signup ? 'Create your workspace' : 'Welcome back') + '</h2>'
+      + '<p class="muted">' + (signup ? 'Start a private workspace for your team.' : 'Log in to your workspace.') + '</p>'
+      + '<div class="auth-tabs" role="tablist"><button role="tab" aria-selected="' + !signup + '" data-a="gatetab" data-v="login">Log in</button><button role="tab" aria-selected="' + signup + '" data-a="gatetab" data-v="signup">Create account</button></div>'
+      + form
+      + '<div class="auth-or"><span>or try the demo</span></div>'
+      + '<div class="auth-demo">' + roles.map((r) => '<button class="btn" data-a="login" data-v="' + r[0] + '"' + dis + '>' + (auth.connecting ? 'Connecting…' : r[1]) + '</button>').join('') + '</div>'
+      + '<p class="small muted">No password needed. Demo data is shared by everyone, so do not type private text. Start as Writer.</p>'
+      + '<p class="small"><button class="linkbtn" data-a="enter">Continue in this browser only</button><span class="muted"> Nothing is stored on the server.</span></p>'
+      + '</div></section></div>';
+  }
   function logout(expired) {
+    setEntered(false);
     auth = { token: '', user: null, workspace: null, connecting: false }; wsInfo = null;
     try { sessionStorage.removeItem(AUTH_KEY); } catch (e) { /* ignore */ }
     state.subs = state.subs.filter((s) => !s.onServer); // other people's drafts must not stay in this browser
@@ -253,10 +297,10 @@
   }
   function guideHtml() {
     return '<div class="card stack"><h3>Try this in 2 minutes</h3><ol class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">'
-      + '<li>At the top press <b>Demo login: Writer</b>.</li>'
+      + '<li>You are signed in. To switch role later, press <b>Log out</b> and pick another demo login on the first screen. Start as <b>Writer</b>.</li>'
       + '<li>In "Try a sample" choose <b>Product page (nearly clean)</b>, press <b>Run check</b>, then <b>Dispute</b> the one warning with a short reason.</li>'
       + '<li>Press <b>Submit for approval</b>. It appears in the <b>Queue</b>.</li>'
-      + '<li><b>Log out</b>, press <b>Demo login: Brand manager</b>, open the piece in the Queue and press <b>Approve</b>.</li>'
+      + '<li><b>Log out</b>, choose <b>Brand manager</b> on the first screen, open the piece in the Queue and press <b>Approve</b>.</li>'
       + '<li>To see the Legal step, check this sentence as Writer instead: <i>Clinically proven to reduce cramps.</i> Dispute the finding and submit. Then log in as <b>Legal</b> and press <b>Sign off</b> before the Brand manager approves.</li>'
       + '<li>Open <b>Insights</b> and <b>Trust and AI</b> to see what the team gets wrong most and what was sent to the AI.</li></ol></div>';
   }
@@ -266,7 +310,7 @@
     if (SERVER_ON) {
       const dis = auth.connecting ? ' disabled' : '';
       h += '<span class="small muted">Demo login</span>' + [['writer', 'Writer'], ['legal', 'Legal'], ['brand_manager', 'Brand manager']].map((r) => '<button class="btn small primary" data-a="login" data-v="' + r[0] + '"' + dis + '>' + (auth.connecting ? 'Connecting…' : r[1]) + '</button>').join('');
-      h += '<button class="btn small" data-a="openauth">Email sign-in</button>';
+      h += '<button class="btn small" data-a="gate">Sign-in screen</button>';
     }
     h += '<label for="user">Viewing as</label><select id="user" data-bind="user">' + D.users.map((u) => '<option value="' + u.id + '"' + (u.id === state.userId ? ' selected' : '') + '>' + esc(u.name) + ' · ' + D.roleNames[u.role] + '</option>').join('') + '</select>';
     return h + '<span class="pill plain" title="Nothing is stored on the server unless you sign in">This browser only</span>';
@@ -694,6 +738,7 @@
 
   function render() {
     const y = window.scrollY, app = document.getElementById('app'); if (!app) return;
+    if (gateOn()) { app.innerHTML = gateHtml(); window.scrollTo(0, 0); return; }
     const waiting = state.subs.filter((s) => (role() === 'legal' && s.status === 'awaiting_specialist') || (role() === 'brand_manager' && s.status === 'awaiting_manager')).length;
     const tabs = [['review', 'Review'], ['queue', 'Queue'], ['sources', 'Source library'], ['insights', 'Insights'], ['trust', 'Trust and AI']];
     if (SERVER_ON) tabs.push(['account', 'Account']);
@@ -711,6 +756,9 @@
     nav(el) { state.view = el.dataset.v; state.ui.open = null; save(); render(); if (state.view === 'queue' && signedIn()) loadServerSubs(true).then(() => render());
       if (state.view === 'account' && signedIn()) loadWorkspace().then(() => render()); },
     openauth() { state.view = 'account'; state.ui.open = null; render(); },
+    enter() { setEntered(true); render(); },
+    gatetab(el) { gateTab = el.dataset.v === 'signup' ? 'signup' : 'login'; render(); const f = document.getElementById(gateTab === 'signup' ? 'su-ws' : 'li-email'); if (f) f.focus(); },
+    gate() { setEntered(false); render(); },
     refresh() { return loadServerSubs(false).then((ok) => { render(); if (ok) toast('Queue refreshed from the server.'); }); },
     theme() { const r = document.documentElement; const dark = r.getAttribute('data-theme') === 'dark' || (!r.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches); r.setAttribute('data-theme', dark ? 'light' : 'dark'); },
     mode(el) { state.work.mode = el.dataset.v; state.work.checked = false; state.work.findings = []; state.work.editing = true; render(); },
