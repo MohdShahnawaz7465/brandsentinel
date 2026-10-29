@@ -29,13 +29,15 @@ def _rx(pattern: str, flags: int = 0):
 
 
 CLAIM_RE = _rx(
-    r"\b\d[\d,.]*\s?(%|percent|mg|kg|g|ml|oz|days?|years?|hours?|calories?|flavou?rs?|servings?)\b|\$\d|"
+    r"\b\d[\d,.]*\s?(%|percent|mg|kg|g|ml|oz|days?|years?|hours?|calories?|flavou?rs?|servings?)\b|"
+    r"\b(?:two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|sixty|ninety|hundred)\s"
+    r"(?:percent|milligrams?|kilograms?|grams?|mg|kg|ml|oz|days?|years?|hours?|calories?|flavou?rs?|servings?)\b|\$\d|"
     r"\b(clinically|proven|guarantee[sd]?|certified|award[- ]winning|number one|best|only|first|free shipping|made in|"
     r"since \d{4}|cures?|treats?|prevents?|reduces?|lowers?|boosts?|doctors?|dermatologists?|scientifically|returns?)\b|#1",
     re.I,
 )
 REGULATED_RE = _rx(r"clinically|clinical|\bcures?\b|\btreats?\b|\bprevents?\b|diagnos|doctor|dermatolog|scientifically|medical|disease", re.I)
-NUM_RE = _rx(r"(\$)?(\d[\d,]*(?:\.\d+)?)\s?(%|percent|mg|kg|ml|oz|g|days?|years?|hours?|minutes?|calories?|flavou?rs?|servings?)?(?![A-Za-z])", re.I)
+NUM_RE = _rx(r"(\$)?(\d[\d,]*(?:\.\d+)?)\s?(%|percent|milligrams?|kilograms?|milliliters?|millilitres?|ounces?|grams?|mg|kg|ml|oz|g|days?|years?|hours?|minutes?|calories?|flavou?rs?|servings?)?(?![A-Za-z])", re.I)
 WORD_RE = _rx(r"[A-Za-z0-9$%][\w'$%.,-]*")
 
 
@@ -82,7 +84,11 @@ def _norm_unit(u, cur, value, has_comma):
         return "%"
     if u in ("flavour", "flavours"):
         return "flavor"
-    return re.sub(r"s$", "", u) or u
+    base = re.sub(r"s$", "", u) or u
+    return UNIT_ALIASES.get(base, base)
+
+
+UNIT_ALIASES = {"milligram": "mg", "kilogram": "kg", "milliliter": "ml", "millilitre": "ml", "gram": "g", "ounce": "oz"}
 
 
 def numbers_of(s: str) -> list[dict]:
@@ -237,7 +243,7 @@ def fact_status(fact: dict, now=None) -> dict:
     return {"state": "valid", "days": None, "until": None}
 
 
-def match_fact(sentence: str, facts: list[dict]):
+def match_fact_legacy(sentence: str, facts: list[dict]):
     sw = set(content_stems(sentence))
     best = None
     for f in facts:
@@ -252,6 +258,167 @@ def match_fact(sentence: str, facts: list[dict]):
         if ok and (best is None or score > best["score"] or (score == best["score"] and overlap > best["overlap"])):
             best = {"fact": f, "score": score, "overlap": overlap}
     return best
+
+
+# ---------- meaning-aware matching (Round 3, improvement 2) ----------
+# Port of the JavaScript matcher; see src/engine.js for the explanation.
+NUMBER_WORDS = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+    "nineteen": 19, "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+    "hundred": 100,
+}
+_NUMBER_WORD_ALT = "|".join(NUMBER_WORDS.keys())
+NUMBER_WORD_RE = _rx(r"\b(?:" + _NUMBER_WORD_ALT + r")\b")
+SPELLED_RE = _rx(
+    r"\b(" + _NUMBER_WORD_ALT + r")\s+(percent|milligrams?|kilograms?|milliliters?|millilitres?|ounces?|grams?|mg|kg|ml|oz|g|days?|years?|hours?|minutes?|calories?|flavou?rs?|servings?)(?![A-Za-z])",
+    re.I,
+)
+MATCH_STOP = STOP | set("there when where which while after before because".split())
+NEG_WORDS = set("not no never none nothing cannot without neither nor".split())
+NEG_RE = _rx(r"\b(?:not|no|never|none|nothing|cannot|without|neither|nor)\b|n['’]t\b")
+PHRASES = [
+    (_rx(r"n['’]t\b"), " not"),
+    (_rx(r"\bcheck[- ]?out\b"), "checkout"),
+    (_rx(r"\bworked out\b"), "calculated"),
+    (_rx(r"\b(?:send|sending|sent) back\b"), "return"),
+    (_rx(r"\bplant[- ]based\b"), "vegan"),
+    (_rx(r"\bfree (?:of|from) ([a-z]+)"), r"\1 free"),
+    (_rx(r"\b(?:expiry|expiration) dates?\b"), "expire"),
+    (_rx(r"\bmonday (?:to|through|thru|-) friday\b|\bweekdays?\b"), "weekday"),
+]
+CONCEPTS = [
+    ["ship", "shipping", "shipped", "dispatch", "dispatched", "dispatching", "deliver", "delivers", "delivered", "delivery", "send", "sent"],
+    ["return", "returns", "returned", "refund", "refunds"],
+    ["accept", "accepted", "allow", "allowed", "permit", "permitted", "honor", "honored"],
+    ["make", "made", "makes", "manufacture", "manufactured", "manufactures", "produce", "produced", "produces", "craft", "crafted"],
+    ["contain", "contains", "contained", "include", "includes", "included", "hold", "holds", "held"],
+    ["serving", "servings", "scoop", "scoops", "portion", "portions"],
+    ["rate", "rates", "fee", "fees", "cost", "costs", "price", "prices", "charge", "charges"],
+    ["calculate", "calculated", "calculates", "compute", "computed"],
+    ["certify", "certified", "certification", "certifications"],
+    ["corp", "corporation"],
+    ["available", "offer", "offered", "offers", "open", "here", "come", "comes"],
+    ["support", "service", "help"],
+    ["box", "boxes", "pack", "packs"],
+    ["within", "inside"],
+    ["free", "complimentary"],
+    ["expire", "expires", "expired", "expiry"],
+]
+_MWORD = _rx(r"[a-z]+")
+_CAPWORD = _rx(r"[A-Za-z][A-Za-z'-]*")
+_CAPSHAPE = _rx(r"[A-Z][a-z]{2,}")
+
+
+def mstem(w: str) -> str:
+    w = stem(w.lower())
+    if len(w) > 5 and w.endswith("our"):
+        w = w[:-3] + "or"
+    return w[:-1] if len(w) > 3 and w.endswith("e") else w
+
+
+CONCEPT_OF: dict[str, str] = {}
+for _g in CONCEPTS:
+    _head = mstem(_g[0])
+    for _w in _g:
+        CONCEPT_OF[mstem(_w)] = _head
+
+
+def _canon(w: str) -> str:
+    k = mstem(w)
+    return CONCEPT_OF.get(k, k)
+
+
+def match_tokens(text) -> list[str]:
+    t = str(text).lower()
+    for rx, to in PHRASES:
+        t = rx.sub(to, t)
+    t = _NUMSTRIP.sub(" ", NUMBER_WORD_RE.sub(" ", t))
+    out: list[str] = []
+    for w in _MWORD.findall(t):
+        if len(w) < 3 or w in MATCH_STOP or w in NEG_WORDS:
+            continue
+        c = _canon(w)
+        if c not in out:
+            out.append(c)
+    return out
+
+
+def negates(text) -> bool:
+    return bool(NEG_RE.search(str(text).lower()))
+
+
+def cap_words(text) -> list[dict]:
+    out = []
+    for i, w in enumerate(_CAPWORD.findall(str(text))):
+        if i == 0 or not _CAPSHAPE.fullmatch(w):
+            continue
+        lw = w.lower()
+        if lw in MATCH_STOP or lw in NEG_WORDS:
+            continue
+        out.append({"raw": w, "lower": lw, "c": _canon(w)})
+    return out
+
+
+def name_conflict(sentence, fact_text):
+    s_tok, f_tok = set(match_tokens(sentence)), set(match_tokens(fact_text))
+    s_raw, f_raw = set(_MWORD.findall(str(sentence).lower())), set(_MWORD.findall(str(fact_text).lower()))
+    left = [w for w in cap_words(fact_text) if w["c"] not in s_tok and w["lower"] not in s_raw]
+    extra = [w for w in cap_words(sentence) if w["c"] not in f_tok and w["lower"] not in f_raw]
+    return {"have": extra[0]["raw"], "want": left[0]["raw"]} if left and extra else None
+
+
+def spelled_numbers(s: str) -> list[dict]:
+    out = []
+    for m in SPELLED_RE.finditer(s):
+        out.append({"raw": m.group(0), "value": NUMBER_WORDS[m.group(1).lower()], "unit": _norm_unit(m.group(2), "", 0, False), "index": m.start(), "end": m.end()})
+    return out
+
+
+def all_numbers(s: str) -> list[dict]:
+    return sorted(numbers_of(s) + spelled_numbers(s), key=lambda n: n["index"])
+
+
+def match_fact(sentence: str, facts: list[dict]):
+    live = [f for f in facts if f.get("enabled") is not False]
+    toks = [match_tokens(f["text"]) for f in live]
+    df: dict[str, int] = {}
+    for ts in toks:
+        for t in ts:
+            df[t] = df.get(t, 0) + 1
+    st = set(match_tokens(sentence))
+    best = None
+    for f, ft in zip(live, toks):
+        if not ft:
+            continue
+        total = got = 0.0
+        hit = 0
+        for t in ft:
+            w = 1 / df[t]
+            total += w
+            if t in st:
+                got += w
+                hit += 1
+        score = got / total
+        ok = (hit >= 2 and score >= 0.6) or (len(ft) <= 2 and hit == len(ft))
+        if ok and (best is None or score > best["score"] or (score == best["score"] and hit > best["overlap"])):
+            best = {"fact": f, "score": score, "overlap": hit}
+    if best:
+        best["negated"] = negates(sentence) != negates(best["fact"]["text"])
+        best["nameConflict"] = name_conflict(sentence, best["fact"]["text"])
+    return best
+
+
+def claim_stance(sentence: str, m: dict) -> dict:
+    fnums = all_numbers(m["fact"]["text"])
+    c = next((n for n in all_numbers(sentence) if any(x["unit"] == n["unit"] and x["unit"] != "" and x["value"] != n["value"] for x in fnums)), None)
+    if c:
+        return {"stance": "conflict", "kind": "number", "number": c, "factNumber": next(x for x in fnums if x["unit"] == c["unit"])}
+    if m.get("negated"):
+        return {"stance": "conflict", "kind": "negation"}
+    if m.get("nameConflict"):
+        return {"stance": "conflict", "kind": "name", "have": m["nameConflict"]["have"], "want": m["nameConflict"]["want"]}
+    return {"stance": "supported"}
 
 
 def weak_fact(sentence: str, facts: list[dict]):
@@ -612,8 +779,8 @@ def review_text(text: str, sources: dict, now=None) -> dict:
                 continue
             f = m["fact"]
             st = fact_status(f, now)
-            fnums = numbers_of(f["text"])
-            conflicts = [n for n in numbers_of(s["text"]) if any(x["unit"] == n["unit"] and x["unit"] != "" and x["value"] != n["value"] for x in fnums)]
+            fnums = all_numbers(f["text"])
+            conflicts = [n for n in all_numbers(s["text"]) if any(x["unit"] == n["unit"] and x["unit"] != "" and x["value"] != n["value"] for x in fnums)]
             if conflicts:
                 c = conflicts[0]
                 fn = next(x for x in fnums if x["unit"] == c["unit"])
@@ -625,6 +792,27 @@ def review_text(text: str, sources: dict, now=None) -> dict:
                         "explanation": "Approved fact " + f["id"] + ': "' + f["text"] + '". The draft number does not match.',
                         "needsSpecialist": True, "allowedNew": [fn["raw"]], "fixes": [{"label": 'Change to "' + fn["raw"] + '"', "replacement": fn["raw"]}],
                         "confidence": 0.95, "factId": f["id"],
+                    }
+                )
+            elif m["negated"]:
+                add(
+                    {
+                        "ruleId": "R-CLAIM-1", "sourceId": f["id"], "category": "claim", "severity": "high", "start": s["start"], "end": s["end"], "quote": s["text"],
+                        "title": "Says the opposite of approved fact " + f["id"],
+                        "explanation": "Approved fact " + f["id"] + ': "' + f["text"] + '". This sentence says the opposite, so it cannot go out as written.',
+                        "needsSpecialist": True, "factId": f["id"], "confidence": 0.85, "keep": [],
+                        "fixes": [{"label": 'Use approved wording: "' + f["text"] + '"', "replacement": re.sub(r"[.]*$", ".", f["text"], count=1)}, {"label": "Remove this claim", "replacement": ""}],
+                    }
+                )
+            elif m["nameConflict"]:
+                nc = m["nameConflict"]
+                add(
+                    {
+                        "ruleId": "R-CLAIM-1", "sourceId": f["id"], "category": "claim", "severity": "high", "start": s["start"], "end": s["end"], "quote": s["text"],
+                        "title": 'Says "' + nc["have"] + '", approved fact says "' + nc["want"] + '"',
+                        "explanation": "Approved fact " + f["id"] + ': "' + f["text"] + '". The name in this sentence does not match.',
+                        "needsSpecialist": True, "factId": f["id"], "confidence": 0.8, "keep": [],
+                        "fixes": [{"label": 'Use approved wording: "' + f["text"] + '"', "replacement": re.sub(r"[.]*$", ".", f["text"], count=1)}, {"label": "Remove this claim", "replacement": ""}],
                     }
                 )
             elif st["state"] == "expired":

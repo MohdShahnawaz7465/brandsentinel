@@ -1,0 +1,419 @@
+{
+ "about": "Frozen before the new matcher was written. Each case: which approved fact (if any) the claim is about, and whether the claim agrees with it (supported) or not (conflict).",
+ "facts": [
+  {
+   "id": "F-01",
+   "text": "Each serving contains 500 mg of sodium."
+  },
+  {
+   "id": "F-02",
+   "text": "Tidewell is made in Portland, Oregon."
+  },
+  {
+   "id": "F-03",
+   "text": "Tidewell has been a Certified B Corp since 2022."
+  },
+  {
+   "id": "F-04",
+   "text": "Free shipping on orders over $40."
+  },
+  {
+   "id": "F-05",
+   "text": "Orders ship within 2 days."
+  },
+  {
+   "id": "F-06",
+   "text": "Returns are accepted within 30 days."
+  },
+  {
+   "id": "F-07",
+   "text": "Shipping rates are calculated at checkout."
+  },
+  {
+   "id": "F-08",
+   "text": "Tidewell comes in 4 flavours."
+  },
+  {
+   "id": "F-09",
+   "text": "Tidewell is vegan and gluten free."
+  },
+  {
+   "id": "F-10",
+   "text": "Customer support is available Monday to Friday, 9 am to 5 pm."
+  },
+  {
+   "id": "F-11",
+   "text": "Each box holds 12 sachets."
+  },
+  {
+   "id": "F-12",
+   "text": "Gift cards never expire."
+  }
+ ],
+ "cases": [
+  {
+   "id": "M01",
+   "group": "paraphrase",
+   "claim": "Every serving has 500 mg of sodium.",
+   "expectedFactId": "F-01",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M02",
+   "group": "paraphrase",
+   "claim": "Each scoop delivers 500 milligrams of sodium.",
+   "expectedFactId": "F-01",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M03",
+   "group": "paraphrase",
+   "claim": "We manufacture Tidewell in Portland, Oregon.",
+   "expectedFactId": "F-02",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M04",
+   "group": "paraphrase",
+   "claim": "Tidewell is produced in Portland.",
+   "expectedFactId": "F-02",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M05",
+   "group": "paraphrase",
+   "claim": "Since 2022 Tidewell has been a certified B Corporation.",
+   "expectedFactId": "F-03",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M06",
+   "group": "paraphrase",
+   "claim": "We have held B Corp certification since 2022.",
+   "expectedFactId": "F-03",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M07",
+   "group": "paraphrase",
+   "claim": "Spend over $40 and shipping is free.",
+   "expectedFactId": "F-04",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M08",
+   "group": "paraphrase",
+   "claim": "Orders over $40 qualify for free delivery.",
+   "expectedFactId": "F-04",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M09",
+   "group": "paraphrase",
+   "claim": "We dispatch orders in two days.",
+   "expectedFactId": "F-05",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M10",
+   "group": "paraphrase",
+   "claim": "Your order ships inside 2 days.",
+   "expectedFactId": "F-05",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M11",
+   "group": "paraphrase",
+   "claim": "You can return items within 30 days.",
+   "expectedFactId": "F-06",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M12",
+   "group": "paraphrase",
+   "claim": "We accept returns for 30 days after purchase.",
+   "expectedFactId": "F-06",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M13",
+   "group": "paraphrase",
+   "claim": "Shipping costs are worked out when you check out.",
+   "expectedFactId": "F-07",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M14",
+   "group": "paraphrase",
+   "claim": "The delivery fee is calculated at checkout.",
+   "expectedFactId": "F-07",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M15",
+   "group": "paraphrase",
+   "claim": "Tidewell is available in four flavors.",
+   "expectedFactId": "F-08",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M16",
+   "group": "paraphrase",
+   "claim": "There are 4 flavours to choose from.",
+   "expectedFactId": "F-08",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M17",
+   "group": "paraphrase",
+   "claim": "Tidewell is vegan and free of gluten.",
+   "expectedFactId": "F-09",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M18",
+   "group": "paraphrase",
+   "claim": "Our powder is plant-based and gluten-free.",
+   "expectedFactId": "F-09",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M19",
+   "group": "paraphrase",
+   "claim": "Our support team is here Monday to Friday from 9 am to 5 pm.",
+   "expectedFactId": "F-10",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M20",
+   "group": "paraphrase",
+   "claim": "Customer service is open weekdays, 9 am to 5 pm.",
+   "expectedFactId": "F-10",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M21",
+   "group": "paraphrase",
+   "claim": "A box contains 12 sachets.",
+   "expectedFactId": "F-11",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M22",
+   "group": "paraphrase",
+   "claim": "Each pack comes with twelve sachets.",
+   "expectedFactId": "F-11",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M23",
+   "group": "paraphrase",
+   "claim": "Gift cards do not have an expiry date.",
+   "expectedFactId": "F-12",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M24",
+   "group": "exact",
+   "claim": "Each serving contains 500 mg of sodium.",
+   "expectedFactId": "F-01",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M25",
+   "group": "exact",
+   "claim": "Returns are accepted within 30 days.",
+   "expectedFactId": "F-06",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M26",
+   "group": "exact",
+   "claim": "Gift cards never expire.",
+   "expectedFactId": "F-12",
+   "expectedStance": "supported"
+  },
+  {
+   "id": "M27",
+   "group": "wrong number",
+   "claim": "Each serving contains 900 mg of sodium.",
+   "expectedFactId": "F-01",
+   "expectedStance": "conflict"
+  },
+  {
+   "id": "M28",
+   "group": "wrong number",
+   "claim": "Orders ship within 5 days.",
+   "expectedFactId": "F-05",
+   "expectedStance": "conflict"
+  },
+  {
+   "id": "M29",
+   "group": "wrong number",
+   "claim": "Tidewell comes in 6 flavours.",
+   "expectedFactId": "F-08",
+   "expectedStance": "conflict"
+  },
+  {
+   "id": "M30",
+   "group": "wrong number",
+   "claim": "Returns are accepted within 60 days.",
+   "expectedFactId": "F-06",
+   "expectedStance": "conflict"
+  },
+  {
+   "id": "M31",
+   "group": "wrong number",
+   "claim": "Free shipping on orders over $100.",
+   "expectedFactId": "F-04",
+   "expectedStance": "conflict"
+  },
+  {
+   "id": "M32",
+   "group": "wrong number",
+   "claim": "Orders ship within five days.",
+   "expectedFactId": "F-05",
+   "expectedStance": "conflict"
+  },
+  {
+   "id": "M33",
+   "group": "wrong number",
+   "claim": "Tidewell has been a B Corp since 2019.",
+   "expectedFactId": "F-03",
+   "expectedStance": "conflict"
+  },
+  {
+   "id": "M34",
+   "group": "opposite meaning",
+   "claim": "Returns are not accepted within 30 days.",
+   "expectedFactId": "F-06",
+   "expectedStance": "conflict"
+  },
+  {
+   "id": "M35",
+   "group": "opposite meaning",
+   "claim": "Orders do not ship within 2 days.",
+   "expectedFactId": "F-05",
+   "expectedStance": "conflict"
+  },
+  {
+   "id": "M36",
+   "group": "opposite meaning",
+   "claim": "Gift cards expire after 12 months.",
+   "expectedFactId": "F-12",
+   "expectedStance": "conflict"
+  },
+  {
+   "id": "M37",
+   "group": "opposite meaning",
+   "claim": "Tidewell is not vegan.",
+   "expectedFactId": "F-09",
+   "expectedStance": "conflict"
+  },
+  {
+   "id": "M38",
+   "group": "wrong name",
+   "claim": "Tidewell is made in Portland, Maine.",
+   "expectedFactId": "F-02",
+   "expectedStance": "conflict"
+  },
+  {
+   "id": "M39",
+   "group": "unrelated",
+   "claim": "Our team loves long trail runs.",
+   "expectedFactId": null,
+   "expectedStance": "none"
+  },
+  {
+   "id": "M40",
+   "group": "unrelated",
+   "claim": "Tidewell keeps you hydrated all day.",
+   "expectedFactId": null,
+   "expectedStance": "none"
+  },
+  {
+   "id": "M41",
+   "group": "unrelated",
+   "claim": "Customer reviews rate us 4.8 stars.",
+   "expectedFactId": null,
+   "expectedStance": "none"
+  },
+  {
+   "id": "M42",
+   "group": "unrelated",
+   "claim": "The founders met in Seattle.",
+   "expectedFactId": null,
+   "expectedStance": "none"
+  },
+  {
+   "id": "M43",
+   "group": "unrelated",
+   "claim": "Join our newsletter for 10% off.",
+   "expectedFactId": null,
+   "expectedStance": "none"
+  },
+  {
+   "id": "M44",
+   "group": "same words, other claim",
+   "claim": "The bottle is made of recycled plastic.",
+   "expectedFactId": null,
+   "expectedStance": "none"
+  },
+  {
+   "id": "M45",
+   "group": "same words, other claim",
+   "claim": "Our packaging is plastic free.",
+   "expectedFactId": null,
+   "expectedStance": "none"
+  },
+  {
+   "id": "M46",
+   "group": "same words, other claim",
+   "claim": "Flavours rotate every season.",
+   "expectedFactId": null,
+   "expectedStance": "none"
+  },
+  {
+   "id": "M47",
+   "group": "same words, other claim",
+   "claim": "Each box is wrapped in recycled paper.",
+   "expectedFactId": null,
+   "expectedStance": "none"
+  },
+  {
+   "id": "M48",
+   "group": "same words, other claim",
+   "claim": "Support our local running clubs.",
+   "expectedFactId": null,
+   "expectedStance": "none"
+  },
+  {
+   "id": "M49",
+   "group": "same words, other claim",
+   "claim": "Tidewell is made with natural ingredients.",
+   "expectedFactId": null,
+   "expectedStance": "none"
+  },
+  {
+   "id": "M50",
+   "group": "same words, other claim",
+   "claim": "Shipping is carbon neutral.",
+   "expectedFactId": null,
+   "expectedStance": "none"
+  },
+  {
+   "id": "M51",
+   "group": "same words, other claim",
+   "claim": "Returns are easy.",
+   "expectedFactId": null,
+   "expectedStance": "none"
+  },
+  {
+   "id": "M52",
+   "group": "same words, other claim",
+   "claim": "Our gift shop opens in spring.",
+   "expectedFactId": null,
+   "expectedStance": "none"
+  }
+ ]
+}

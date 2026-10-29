@@ -7,7 +7,7 @@
 
   const STOP = new Set(('a an the and or of to in on for with is are was were be been it its this that these those at by from as we you your our their they he she i not no do does did can will would should could may might have has had than then so if but into over per up out about more most all any each every just also very every enjoy get got').split(' '));
   const CLAIM_TRIGGERS = new Set(['clinical', 'clinically', 'proven', 'guarantee', 'guarantees', 'guaranteed', 'certified', 'cure', 'cures', 'cured', 'treat', 'treats', 'prevent', 'prevents', 'reduce', 'reduces', 'lower', 'lowers', 'boost', 'boosts', 'best', 'only', 'first', 'doctor', 'doctors', 'scientifically', 'award', 'winning']);
-  const CLAIM_RE = /\b\d[\d,.]*\s?(%|percent|mg|kg|g|ml|oz|days?|years?|hours?|calories?|flavou?rs?|servings?)\b|\$\d|\b(clinically|proven|guarantee[sd]?|certified|award[- ]winning|number one|best|only|first|free shipping|made in|since \d{4}|cures?|treats?|prevents?|reduces?|lowers?|boosts?|doctors?|dermatologists?|scientifically|returns?)\b|#1/i;
+  const CLAIM_RE = /\b\d[\d,.]*\s?(%|percent|mg|kg|g|ml|oz|days?|years?|hours?|calories?|flavou?rs?|servings?)\b|\b(?:two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|sixty|ninety|hundred)\s(?:percent|milligrams?|kilograms?|grams?|mg|kg|ml|oz|days?|years?|hours?|calories?|flavou?rs?|servings?)\b|\$\d|\b(clinically|proven|guarantee[sd]?|certified|award[- ]winning|number one|best|only|first|free shipping|made in|since \d{4}|cures?|treats?|prevents?|reduces?|lowers?|boosts?|doctors?|dermatologists?|scientifically|returns?)\b|#1/i;
   const REGULATED_RE = /clinically|clinical|\bcures?\b|\btreats?\b|\bprevents?\b|diagnos|doctor|dermatolog|scientifically|medical|disease/i;
   const SEV = { high: 0, medium: 1, low: 2 };
 
@@ -28,15 +28,17 @@
   function wordCount(s) { return (s.match(/[A-Za-z0-9$%][\w'$%.,-]*/g) || []).length; }
 
   /* ---------- numbers ---------- */
-  const NUM_RE = /(\$)?(\d[\d,]*(?:\.\d+)?)\s?(%|percent|mg|kg|ml|oz|g|days?|years?|hours?|minutes?|calories?|flavou?rs?|servings?)?(?![A-Za-z])/gi;
+  const NUM_RE = /(\$)?(\d[\d,]*(?:\.\d+)?)\s?(%|percent|milligrams?|kilograms?|milliliters?|millilitres?|ounces?|grams?|mg|kg|ml|oz|g|days?|years?|hours?|minutes?|calories?|flavou?rs?|servings?)?(?![A-Za-z])/gi;
   function normUnit(u, cur, value, hasComma) {
     if (cur) return '$';
     if (!u) return value >= 1900 && value <= 2100 && !hasComma ? 'yr' : '';
     u = u.toLowerCase();
     if (u === 'percent') return '%';
     if (u === 'flavour' || u === 'flavours') return 'flavor';
-    return u.replace(/s$/, '') || u;
+    const base = u.replace(/s$/, '') || u;
+    return UNIT_ALIASES[base] || base;
   }
+  const UNIT_ALIASES = { milligram: 'mg', kilogram: 'kg', milliliter: 'ml', millilitre: 'ml', gram: 'g', ounce: 'oz' };
   function numbersOf(s) {
     const out = [];
     let m;
@@ -132,7 +134,7 @@
     }
     return { state: 'valid', days: null, until: null };
   }
-  function matchFact(sentence, facts) {
+  function matchFactLegacy(sentence, facts) {
     const sw = new Set(contentStems(sentence));
     let best = null;
     for (const f of facts) {
@@ -145,6 +147,132 @@
       if (ok && (!best || score > best.score || (score === best.score && overlap > best.overlap))) best = { fact: f, score, overlap };
     }
     return best;
+  }
+  /* ---------- meaning-aware matching (Round 3, improvement 2) ----------
+     The old matcher counted shared words. This one first turns both texts into plain "ideas": number words
+     become numbers, spelling and wording variants are folded together (ship / dispatch / deliver), and a
+     few phrases are normalised (check out, Monday to Friday, free of gluten). Then it checks how much of
+     the approved fact is covered, giving rare words more weight. It also notices three things a word count
+     misses: the claim says the opposite (not / never), the claim names a different person or place, and
+     numbers written as words ("five days"). It is rule-based on purpose: it runs in the browser with no
+     download, behaves the same on the server, and every decision can be explained. */
+  const NUMBER_WORDS = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100 };
+  const NUMBER_WORD_ALT = Object.keys(NUMBER_WORDS).join('|');
+  const NUMBER_WORD_RE = new RegExp('\\b(?:' + NUMBER_WORD_ALT + ')\\b', 'g');
+  const SPELLED_RE = new RegExp('\\b(' + NUMBER_WORD_ALT + ')\\s+(percent|milligrams?|kilograms?|milliliters?|millilitres?|ounces?|grams?|mg|kg|ml|oz|g|days?|years?|hours?|minutes?|calories?|flavou?rs?|servings?)(?![A-Za-z])', 'gi');
+  const MATCH_STOP = new Set([...STOP, ...'there when where which while after before because'.split(' ')]);
+  const NEG_WORDS = new Set('not no never none nothing cannot without neither nor'.split(' '));
+  const NEG_RE = /\b(?:not|no|never|none|nothing|cannot|without|neither|nor)\b|n['’]t\b/;
+  const PHRASES = [
+    [/n['’]t\b/g, ' not'],
+    [/\bcheck[- ]?out\b/g, 'checkout'],
+    [/\bworked out\b/g, 'calculated'],
+    [/\b(?:send|sending|sent) back\b/g, 'return'],
+    [/\bplant[- ]based\b/g, 'vegan'],
+    [/\bfree (?:of|from) ([a-z]+)/g, '$1 free'],
+    [/\b(?:expiry|expiration) dates?\b/g, 'expire'],
+    [/\bmonday (?:to|through|thru|-) friday\b|\bweekdays?\b/g, 'weekday'],
+  ];
+  /* Words that mean the same thing for matching. The first word of each group is the shared form. */
+  const CONCEPTS = [
+    ['ship', 'shipping', 'shipped', 'dispatch', 'dispatched', 'dispatching', 'deliver', 'delivers', 'delivered', 'delivery', 'send', 'sent'],
+    ['return', 'returns', 'returned', 'refund', 'refunds'],
+    ['accept', 'accepted', 'allow', 'allowed', 'permit', 'permitted', 'honor', 'honored'],
+    ['make', 'made', 'makes', 'manufacture', 'manufactured', 'manufactures', 'produce', 'produced', 'produces', 'craft', 'crafted'],
+    ['contain', 'contains', 'contained', 'include', 'includes', 'included', 'hold', 'holds', 'held'],
+    ['serving', 'servings', 'scoop', 'scoops', 'portion', 'portions'],
+    ['rate', 'rates', 'fee', 'fees', 'cost', 'costs', 'price', 'prices', 'charge', 'charges'],
+    ['calculate', 'calculated', 'calculates', 'compute', 'computed'],
+    ['certify', 'certified', 'certification', 'certifications'],
+    ['corp', 'corporation'],
+    ['available', 'offer', 'offered', 'offers', 'open', 'here', 'come', 'comes'],
+    ['support', 'service', 'help'],
+    ['box', 'boxes', 'pack', 'packs'],
+    ['within', 'inside'],
+    ['free', 'complimentary'],
+    ['expire', 'expires', 'expired', 'expiry'],
+  ];
+  function mstem(w) {
+    w = stem(w.toLowerCase());
+    if (w.length > 5 && w.endsWith('our')) w = w.slice(0, -3) + 'or';
+    return w.length > 3 && w.endsWith('e') ? w.slice(0, -1) : w;
+  }
+  const CONCEPT_OF = (() => {
+    const m = new Map();
+    for (const g of CONCEPTS) { const head = mstem(g[0]); for (const w of g) m.set(mstem(w), head); }
+    return m;
+  })();
+  const canon = (w) => { const k = mstem(w); return CONCEPT_OF.get(k) || k; };
+  function matchTokens(text) {
+    let t = String(text).toLowerCase();
+    for (const [re, to] of PHRASES) t = t.replace(re, to);
+    t = t.replace(NUMBER_WORD_RE, ' ').replace(/\d[\d,.]*/g, ' ');
+    const out = [];
+    for (const w of t.match(/[a-z]+/g) || []) {
+      if (w.length < 3 || MATCH_STOP.has(w) || NEG_WORDS.has(w)) continue;
+      const c = canon(w);
+      if (!out.includes(c)) out.push(c);
+    }
+    return out;
+  }
+  const negates = (text) => NEG_RE.test(String(text).toLowerCase());
+  function capWords(text) {
+    const ws = String(text).match(/[A-Za-z][A-Za-z'-]*/g) || [];
+    const out = [];
+    ws.forEach((w, i) => {
+      if (i === 0 || !/^[A-Z][a-z]{2,}$/.test(w)) return;
+      const lw = w.toLowerCase();
+      if (MATCH_STOP.has(lw) || NEG_WORDS.has(lw)) return;
+      out.push({ raw: w, lower: lw, c: canon(w) });
+    });
+    return out;
+  }
+  /* A claim that names a different place or person than the fact: the fact has a name the claim leaves out,
+     and the claim has a name the fact does not. */
+  function nameConflict(sentence, factText) {
+    const sTok = new Set(matchTokens(sentence)), fTok = new Set(matchTokens(factText));
+    const sRaw = new Set((String(sentence).toLowerCase().match(/[a-z]+/g) || [])), fRaw = new Set((String(factText).toLowerCase().match(/[a-z]+/g) || []));
+    const left = capWords(factText).filter((w) => !sTok.has(w.c) && !sRaw.has(w.lower));
+    const extra = capWords(sentence).filter((w) => !fTok.has(w.c) && !fRaw.has(w.lower));
+    return left.length && extra.length ? { have: extra[0].raw, want: left[0].raw } : null;
+  }
+  function spelledNumbers(s) {
+    const out = []; let m;
+    SPELLED_RE.lastIndex = 0;
+    while ((m = SPELLED_RE.exec(s))) out.push({ raw: m[0], value: NUMBER_WORDS[m[1].toLowerCase()], unit: normUnit(m[2], '', 0, false), index: m.index, end: m.index + m[0].length });
+    return out;
+  }
+  function allNumbers(s) { return numbersOf(s).concat(spelledNumbers(s)).sort((a, b) => a.index - b.index); }
+  function matchFact(sentence, facts) {
+    const live = facts.filter((f) => f.enabled !== false);
+    const toks = live.map((f) => matchTokens(f.text));
+    const df = new Map();
+    toks.forEach((ts) => ts.forEach((t) => df.set(t, (df.get(t) || 0) + 1)));
+    const st = new Set(matchTokens(sentence));
+    let best = null;
+    live.forEach((f, i) => {
+      const ft = toks[i];
+      if (!ft.length) return;
+      let total = 0, got = 0, hit = 0;
+      for (const t of ft) { const w = 1 / df.get(t); total += w; if (st.has(t)) { got += w; hit++; } }
+      const score = got / total;
+      const ok = (hit >= 2 && score >= 0.6) || (ft.length <= 2 && hit === ft.length);
+      if (ok && (!best || score > best.score || (score === best.score && hit > best.overlap))) best = { fact: f, score, overlap: hit };
+    });
+    if (best) {
+      best.negated = negates(sentence) !== negates(best.fact.text);
+      best.nameConflict = nameConflict(sentence, best.fact.text);
+    }
+    return best;
+  }
+  /* Does the claim agree with the fact it matched? */
+  function claimStance(sentence, m) {
+    const fnums = allNumbers(m.fact.text);
+    const c = allNumbers(sentence).find((n) => fnums.some((x) => x.unit === n.unit && x.unit !== '' && x.value !== n.value));
+    if (c) return { stance: 'conflict', kind: 'number', number: c, factNumber: fnums.find((x) => x.unit === c.unit) };
+    if (m.negated) return { stance: 'conflict', kind: 'negation' };
+    if (m.nameConflict) return { stance: 'conflict', kind: 'name', have: m.nameConflict.have, want: m.nameConflict.want };
+    return { stance: 'supported' };
   }
   function weakFact(sentence, facts) {
     const sw = new Set(contentStems(sentence));
@@ -437,8 +565,8 @@
           continue;
         }
         const f = m.fact, st = factStatus(f, now);
-        const fnums = numbersOf(f.text);
-        const conflicts = numbersOf(s.text).filter((n) => fnums.some((x) => x.unit === n.unit && x.unit !== '' && x.value !== n.value));
+        const fnums = allNumbers(f.text);
+        const conflicts = allNumbers(s.text).filter((n) => fnums.some((x) => x.unit === n.unit && x.unit !== '' && x.value !== n.value));
         if (conflicts.length) {
           const c = conflicts[0];
           const fn = fnums.find((x) => x.unit === c.unit);
@@ -447,6 +575,22 @@
             ctxStart: s.start, ctxEnd: s.end, dropNumbers: [c.raw],
             title: 'Says ' + c.raw + ', approved fact says ' + fn.raw, explanation: 'Approved fact ' + f.id + ': "' + f.text + '". The draft number does not match.',
             needsSpecialist: true, allowedNew: [fn.raw], fixes: [{ label: 'Change to "' + fn.raw + '"', replacement: fn.raw }], confidence: 0.95, factId: f.id,
+          });
+        } else if (m.negated) {
+          add({
+            ruleId: 'R-CLAIM-1', sourceId: f.id, category: 'claim', severity: 'high', start: s.start, end: s.end, quote: s.text,
+            title: 'Says the opposite of approved fact ' + f.id,
+            explanation: 'Approved fact ' + f.id + ': "' + f.text + '". This sentence says the opposite, so it cannot go out as written.',
+            needsSpecialist: true, factId: f.id, confidence: 0.85, keep: [],
+            fixes: [{ label: 'Use approved wording: "' + f.text + '"', replacement: f.text.replace(/[.]*$/, '.') }, { label: 'Remove this claim', replacement: '' }],
+          });
+        } else if (m.nameConflict) {
+          add({
+            ruleId: 'R-CLAIM-1', sourceId: f.id, category: 'claim', severity: 'high', start: s.start, end: s.end, quote: s.text,
+            title: 'Says "' + m.nameConflict.have + '", approved fact says "' + m.nameConflict.want + '"',
+            explanation: 'Approved fact ' + f.id + ': "' + f.text + '". The name in this sentence does not match.',
+            needsSpecialist: true, factId: f.id, confidence: 0.8, keep: [],
+            fixes: [{ label: 'Use approved wording: "' + f.text + '"', replacement: f.text.replace(/[.]*$/, '.') }, { label: 'Remove this claim', replacement: '' }],
           });
         } else if (st.state === 'expired') {
           const alt = facts.find((x) => x.id !== f.id && x.replaces === f.id && factStatus(x, now).state !== 'expired');
@@ -549,6 +693,6 @@
 
   return {
     splitSentences, numbersOf, contentStems, keepChips, meaningCheck, evaluateFixes, applyFix, reviewText, checkVisual, redact, retrieve, evaluateSet,
-    factStatus, matchFact, fkGrade, syllables, contrastRatio, hexToRgb, rgbToHex, nearestPalette, sourceLabel, wordCount, CLAIM_RE, REGULATED_RE, tidy,
+    factStatus, matchFact, matchFactLegacy, claimStance, matchTokens, allNumbers, fkGrade, syllables, contrastRatio, hexToRgb, rgbToHex, nearestPalette, sourceLabel, wordCount, CLAIM_RE, REGULATED_RE, tidy,
   };
 });

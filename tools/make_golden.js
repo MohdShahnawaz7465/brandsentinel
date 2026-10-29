@@ -43,3 +43,15 @@ U.visual = [{ alt: '', fg: '#999999', bg: '#FFFFFF', dominant: [{ hex: '#FF00FF'
 U.factStatus = [['2026-09-30'], ['2026-11-15'], ['2027-06-30'], ['']].map(([u]) => [u, E.factStatus({ validUntil: u }, NOW)]);
 fs.writeFileSync(__dirname + '/../backend/tests/golden.json', JSON.stringify(out));
 console.log('golden: ' + out.reviews.length + ' reviews, ' + out.reviews.reduce((a, r) => a + r.findings.length, 0) + ' findings');
+
+// Answers of the claim-to-fact matcher on the measured test set. The Python tests must reproduce them.
+{
+  const T = require('../test/matching_testset.json');
+  const rows = T.cases.map((c) => {
+    const m = E.matchFact(c.claim, T.facts);
+    const st = m ? E.claimStance(c.claim, m) : { stance: 'none' };
+    return { id: c.id, factId: m ? m.fact.id : null, score: m ? m.score : null, stance: st.stance, kind: st.kind || null };
+  });
+  fs.writeFileSync(__dirname + '/../backend/tests/matching_golden.json', JSON.stringify(rows));
+  console.log('matching golden: ' + rows.length + ' cases');
+}
