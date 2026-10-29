@@ -30,7 +30,7 @@
   const setEntered = (v) => { entered = v; try { if (v) sessionStorage.setItem('brandsentinel.entered', '1'); else sessionStorage.removeItem('brandsentinel.entered'); } catch (e) { /* ignore */ } };
   if (signedIn()) state.userId = auth.user.id;
   async function api(path, opts) {
-    const o = opts || {}, ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 8000);
+    const o = opts || {}, ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), o.timeout || 8000);
     try {
       const headers = { 'Content-Type': 'application/json' }; if (auth.token) headers.Authorization = 'Bearer ' + auth.token;
       const res = await fetch(API_URL + path, { method: o.method || 'GET', signal: ctl.signal, headers, body: o.body ? JSON.stringify(o.body) : undefined });
@@ -44,7 +44,7 @@
     if (auth.connecting) return;
     auth.connecting = true; render();
     try {
-      const j = await api('/api/auth/demo', { method: 'POST', body: { role: roleName } });
+      const j = await api('/api/auth/demo', { method: 'POST', body: { role: roleName }, timeout: 25000 });
       applySession(j); await loadServerSubs(true); save(); toast('Signed in as ' + j.user.name + '.');
     } catch (e) {
       auth.connecting = false;
@@ -86,7 +86,7 @@
         await api('/api/workspace/members', { method: 'POST', body: v });
         await loadWorkspace(); toast('Added ' + v.name + '. They can log in with that email and password.');
       } else {
-        const j = await api(kind === 'login' ? '/api/auth/login' : '/api/auth/signup', { method: 'POST', body: v });
+        const j = await api(kind === 'login' ? '/api/auth/login' : '/api/auth/signup', { method: 'POST', body: v, timeout: 25000 });
         applySession(j); await loadServerSubs(true); state.view = 'review'; save();
         toast(kind === 'signup' ? 'Workspace created. You are its admin. Add your team in the Account tab.' : 'Signed in as ' + j.user.name + '.');
       }
@@ -156,7 +156,7 @@
       + form
       + '<div class="auth-or"><span>or try the demo</span></div>'
       + '<div class="auth-demo">' + roles.map((r) => '<button class="btn" data-a="login" data-v="' + r[0] + '"' + dis + '>' + (auth.connecting ? 'Connecting…' : r[1]) + '</button>').join('') + '</div>'
-      + '<p class="small muted">No password needed. Demo data is shared by everyone, so do not type private text. Start as Writer.</p>'
+      + (dis ? '<p class="small"><b>Connecting to the server…</b> The first sign-in after a quiet period can take up to 20 seconds.</p>' : '<p class="small muted">No password needed. Demo data is shared by everyone, so do not type private text. Start as Writer.</p>')
       + '<p class="small"><button class="linkbtn" data-a="enter">Continue in this browser only</button><span class="muted"> Nothing is stored on the server.</span></p>'
       + '</div></section></div>';
   }
@@ -890,6 +890,8 @@
     else if (k === 'conf') { S.confidential.push($('ncf')); bump('Added confidential term'); }
   });
 
+  /* Wake the server while the person reads the first screen, so the first sign-in does not wait for a cold start. */
+  if (gateOn()) { try { fetch(API_URL + '/api/auth/demo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'writer' }) }).catch(() => {}); } catch (e) { /* ignore */ } }
   render(); detectAI();
   window.__bs = { state: () => state, E, D, A, W, F }; // for tests
 })();
