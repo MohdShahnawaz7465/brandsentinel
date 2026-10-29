@@ -19,7 +19,7 @@
 
 ### 2. Meaning-based matching of claims to approved facts, with a measured test set (done)
 - The matcher understands rewording (ship / dispatch / deliver), numbers written as words ("five days"), spelling variants, opposite meaning ("not accepted" versus "accepted") and a different name ("Maine" versus "Oregon").
-- Measured on a frozen set of **52 claims**: right verdicts **38 to 50 of 52 (73.1% to 96.2%)**, reworded true claims found **16 to 22 of 23**, wrong claims wrongly passed as "verified" **7 to 0**.
+- Measured on a frozen set of **52 claims**: right verdicts **38 to 52 of 52 (73.1% to 100.0%)**, reworded true claims found **16 to 23 of 23 (100.0%)**, wrong claims wrongly passed as "verified" **7 to 0**.
 - It is rule-based, not a neural model (see "What changed from the plan"). Two known misses are listed in [MATCHING.md](MATCHING.md).
 
 ### 3. Private workspaces, real login, server-enforced Legal sign-off (done)
@@ -35,7 +35,7 @@
 |---|---|---|
 | Meaning-based retrieval with embeddings and pgvector | A rule-based matcher (synonym groups, number words, negation and name checks) with a measured test set. No embeddings, no pgvector. | An embedding model means a large download on first use, results that can differ between browser and server, and no way to say why something matched. A rule-based matcher runs in the browser with no download, gives the same answer on the server, and each decision can be explained to Legal. We measured it instead of assuming. |
 | PDF, slide and image-text checking with OCR in a container service | PDF and image OCR **in the browser**, no slides | Serverless hosting cannot run OCR, and reading in the browser also means files are never uploaded. Slides were not built. |
-| Real accounts, workspaces, **encrypted storage and an exportable audit log** | Accounts, private workspaces, members, roles, AI switch, server-checked Legal | Encryption beyond the database host's own, and the audit export, were not built. |
+| Real accounts, workspaces, **encrypted storage and an exportable audit log** | Accounts, private workspaces, members, roles, AI switch, server-checked Legal | Encryption beyond the database host's own was not built. Full audit-log CSV export is implemented on the Insights page. |
 | Round 2 had demo logins only | Demo login kept for judges, next to real accounts | So anyone can try the full flow in one click. |
 
 ## Technical details
@@ -66,7 +66,7 @@
 
 ## Known limits
 
-Demo data is shared; the first sign-in can be slow on free hosting; OCR is English only and needs public CDNs; no encryption beyond the host's, no audit export, no password reset; the matcher is rule-based and small-set measured. Full list: [LIMITATIONS.md](LIMITATIONS.md).
+Demo data is shared; the first sign-in can be slow on free hosting; OCR is English only and needs public CDNs; no encryption beyond the host's, no password reset (audit-log CSV export is supported); the matcher is rule-based and small-set measured. Full list: [LIMITATIONS.md](LIMITATIONS.md).
 
 ## Team contributions
 

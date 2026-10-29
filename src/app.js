@@ -10,7 +10,7 @@
   const CAT = { terminology: 'Terminology', tone: 'Tone', claim: 'Claim', readability: 'Readability', accessibility: 'Accessibility', visual: 'Visual', confidentiality: 'Confidentiality', messaging: 'Messaging' };
 
   /* ---------- state ---------- */
-  const blankWork = () => ({ subId: null, title: '', text: '', mode: 'text', alt: '', isLogo: false, useContrast: false, fg: '#767676', bg: '#FFFFFF', imageInfo: null, imageUrl: '', findings: [], verified: [], ai: [], receipt: null, checked: false, editing: true, stats: null, pageMap: null, pageText: '', sourceNote: '' });
+  const blankWork = () => ({ subId: null, title: '', text: '', mode: 'text', alt: '', isLogo: false, useContrast: false, fg: '#767676', bg: '#FFFFFF', imageInfo: null, imageUrl: '', findings: [], verified: [], ai: [], receipt: null, checked: false, editing: true, stats: null, pageMap: null, pageText: '', sourceNote: '', channel: 'general' });
   let state = load();
   const API_URL = (typeof window !== 'undefined' && window.BS_API_URL) || 'http://127.0.0.1:8000';
   let aiTools = { sample: null, server: null, checked: false };
@@ -567,6 +567,16 @@
     return h + dlBtn(r) + '</div>';
   }
 
+  function channelLimitHtml(w) {
+    if (!w || !w.channel || w.channel === 'general') return '';
+    const limits = { x: { max: 280, name: 'X' }, email_subject: { max: 50, name: 'Email subject' }, linkedin: { max: 3000, name: 'LinkedIn' } };
+    const lim = limits[w.channel];
+    if (!lim) return '';
+    const len = (w.text || '').length;
+    const diff = lim.max - len;
+    return ' · <span class="pill ' + (diff < 0 ? 'high' : 'plain') + '">' + lim.name + ': ' + len + '/' + lim.max + (diff < 0 ? ' (' + Math.abs(diff) + ' over limit)' : ' (' + diff + ' remaining)') + '</span>';
+  }
+
   /* ---------- views ---------- */
   function reviewView() {
     const w = state.work, locked = false;
@@ -574,15 +584,15 @@
     let h = (signedIn() ? workspaceNotice() : '') + '<div class="cols"><section class="stack">';
     h += '<div class="card stack"><div class="row"><h2 class="grow">Check a draft</h2><div class="seg" role="group" aria-label="Content type"><button data-a="mode" data-v="text" aria-pressed="' + (w.mode === 'text') + '">Text</button><button data-a="mode" data-v="image" aria-pressed="' + (w.mode === 'image') + '">Image</button></div></div>';
     if (!can('create') && !w.subId) h += '<div class="notice warn">You are viewing as <b>' + D.roleNames[role()] + '</b>. Writers start reviews. Switch to a writer at the top, or open a piece from the Queue.</div>';
-    h += '<label class="f2">Title<input type="text" id="title" data-bind="title" value="' + esc(w.title) + '" placeholder="e.g. Autumn launch email"></label>';
+    h += '<div class="row"><label class="f2 grow">Title<input type="text" id="title" data-bind="title" value="' + esc(w.title) + '" placeholder="e.g. Autumn launch email"></label><label class="f2">Target channel<select id="channel" data-bind="channel"><option value="general"' + (!w.channel || w.channel === 'general' ? ' selected' : '') + '>Standard (Web / PR / Doc)</option><option value="x"' + (w.channel === 'x' ? ' selected' : '') + '>X / Twitter (280 max)</option><option value="email_subject"' + (w.channel === 'email_subject' ? ' selected' : '') + '>Email Subject (50 max)</option><option value="linkedin"' + (w.channel === 'linkedin' ? ' selected' : '') + '>LinkedIn Post (3,000 max)</option></select></label></div>';
     if (w.mode === 'text') {
       h += '<div class="row"><label class="f2 grow">Try a sample<select id="sample" data-bind="sample"><option value="">Choose a sample draft…</option>' + D.samples.map((x) => '<option value="' + x.id + '">' + esc(x.label) + '</option>').join('') + '</select></label>'
         + '<label class="f2">Or upload<input type="file" id="file" data-bind="file" accept=".docx,.pdf,.txt,.md,image/*"></label></div>'
         + '<p class="small muted">Word, PDF, text, or a picture with text in it. PDFs and pictures are read inside your browser, so the file is not uploaded.</p>' + (w.sourceNote ? '<p class="small"><b>' + esc(w.sourceNote) + '</b></p>' : '');
       if (w.checked && !w.editing) {
-        h += '<div class="doc" id="doc" aria-label="Your draft with findings marked">' + annotated(w.text, w.findings) + '</div><div class="row"><button class="btn" data-a="edit">Edit text</button><span class="small muted">Tap a highlighted phrase to jump to its finding.</span></div>';
+        h += '<div class="doc" id="doc" aria-label="Your draft with findings marked">' + annotated(w.text, w.findings) + '</div><div class="row"><button class="btn" data-a="edit">Edit text</button><button class="btn" data-a="downloaddraft">Download clean copy (.md)</button><span class="small muted">Tap a highlighted phrase to jump to its finding.</span></div>';
       } else {
-        h += '<textarea id="text" rows="12" data-bind="text" placeholder="Paste your draft here, or choose a sample above.">' + esc(w.text) + '</textarea>';
+        h += '<textarea id="text" rows="12" data-bind="text" placeholder="Paste your draft here, or choose a sample above.">' + esc(w.text) + '</textarea>' + (w.channel && w.channel !== 'general' ? '<p class="small muted" style="margin-top:4px">' + channelLimitHtml(w).replace(/^ · /, '') + '</p>' : '');
       }
     } else {
       h += '<div class="drop"><label class="f2">Image file (PNG, JPG, SVG, WebP)<input type="file" id="img" data-bind="img" accept="image/*"></label></div>';
@@ -612,7 +622,7 @@
       const open = W.openCount(w.findings);
       h += '<div class="card stack"><div class="sum"><h3 class="grow">' + (groups.length ? groups.length + ' finding' + (groups.length === 1 ? '' : 's') : 'No findings') + '</h3>'
         + '<span class="pill high">' + c.high + ' high</span><span class="pill medium">' + c.medium + ' medium</span><span class="pill low">' + c.low + ' low</span></div>'
-        + (w.stats ? '<p class="small muted">' + w.stats.words + ' words · reading level grade ' + w.stats.grade.toFixed(1) + (s && s.fixed ? ' · ' + s.fixed + ' fix' + (s.fixed > 1 ? 'es' : '') + ' applied' : '') + '</p>' : '')
+        + (w.stats ? '<p class="small muted">' + w.stats.words + ' words · reading level grade ' + w.stats.grade.toFixed(1) + (s && s.fixed ? ' · ' + s.fixed + ' fix' + (s.fixed > 1 ? 'es' : '') + ' applied' : '') + (w.channel && w.channel !== 'general' ? channelLimitHtml(w) : '') + '</p>' : '')
         + receiptHtml(w.receipt) + '</div>';
       groups.forEach((g) => { h += findingCard(g.f, locked, g.others); });
       if (!w.findings.length) h += '<div class="notice">Nothing to fix. Submit it for approval below.</div>';
@@ -710,7 +720,7 @@
   function insightsView() {
     const I = W.insights(state.subs, ruleTitle);
     const real = state.subs.filter((s) => !s.sample).length;
-    let h = '<div class="stack"><div class="row"><h2 class="grow">Insights</h2></div><div class="notice small">Includes ' + state.subs.filter((s) => s.sample).length + ' pieces of <b>sample history</b> so this page is not empty. Your own reviews (' + real + ') are added as you submit and triage.</div>';
+    let h = '<div class="stack"><div class="row"><h2 class="grow">Insights</h2><button class="btn small" data-a="csvexport">Export audit log (CSV)</button></div><div class="notice small">Includes ' + state.subs.filter((s) => s.sample).length + ' pieces of <b>sample history</b> so this page is not empty. Your own reviews (' + real + ') are added as you submit and triage.</div>';
     h += '<div class="grid2"><div class="card stat"><span class="small muted">Pieces reviewed</span><b>' + I.totals.submissions + '</b></div><div class="card stat"><span class="small muted">Approved</span><b>' + I.totals.approved + '</b></div><div class="card stat"><span class="small muted">Findings rated clear</span><b>' + (I.clarity.pct == null ? '–' : I.clarity.pct + '%') + '</b><span class="small muted">' + (I.clarity.total ? I.clarity.total + ' ratings from testers' : 'Use Clear / Unclear on findings to fill this in') + '</span></div></div>';
     h += '<div class="grid2"><div class="card stack"><h3>Most broken rules</h3><p class="small muted">Findings on first check, across all pieces.</p>' + (I.topRules.length ? barRows(I.topRules.slice(0, 8), 'count', (x) => x.count, I.topRules[0].count) : '<p class="small muted">No data yet.</p>') + '</div>';
     h += '<div class="card stack"><h3>Most disputed rules</h3><p class="small muted">Share of findings writers disputed.</p>' + (I.disputes.length ? barRows(I.disputes.slice(0, 8), 'rate', (x) => x.rate, 1, true) : '<p class="small muted">Nothing disputed yet.</p>') + '</div></div>';
@@ -773,6 +783,41 @@
       const url = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }));
       const a = document.createElement('a'); a.href = url; a.download = 'brandsentinel-receipt-' + r.id + '.json';
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
+    downloaddraft() {
+      const w = state.work;
+      if (!w || !w.text) return toast('No draft text to download.');
+      const safeTitle = (w.title || 'draft').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'draft';
+      const blob = new Blob([w.text], { type: 'text/markdown;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = safeTitle + '.md';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast('Draft downloaded as .md');
+    },
+    csvexport() {
+      const rows = [['Submission ID', 'Title', 'Author', 'Status', 'Created At', 'Event Time', 'Event User', 'Event Type', 'Event Note']];
+      state.subs.forEach((s) => {
+        const evs = eventsOf(s);
+        if (evs && evs.length) {
+          evs.forEach((e) => {
+            rows.push([s.id, s.title, s.author, W.STATUS[s.status] || s.status, s.createdAt, e.at || '', e.by || '', e.type || '', e.note || '']);
+          });
+        } else {
+          rows.push([s.id, s.title, s.author, W.STATUS[s.status] || s.status, s.createdAt, '', '', '', '']);
+        }
+      });
+      const csv = rows.map((r) => r.map((c) => '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"').join(',')).join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'brandsentinel-audit-log.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast('Audit log exported to CSV.');
     },
     focus(el) { const c = document.getElementById('card-' + el.dataset.id); if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); c.classList.add('flash'); setTimeout(() => c.classList.remove('flash'), 1400); } },
     chip(el) { const f = find(el.dataset.id); const c = f.chips[+el.dataset.i]; c.on = !c.on; save(); render(); },
@@ -847,6 +892,7 @@
   document.addEventListener('change', async (e) => {
     const t = e.target, b = t.dataset && t.dataset.bind; if (!b) return; const w = state.work;
     if (b === 'user') { state.userId = t.value; state.ui.open = state.ui.open; save(); render(); }
+    else if (b === 'channel') { w.channel = t.value; save(); render(); }
     else if (b === 'sample') { const s = D.samples.find((x) => x.id === t.value); if (s) { state.work = Object.assign(blankWork(), { title: s.title, text: s.text }); save(); render(); } }
     else if (b === 'file') {
       const f = t.files[0]; if (!f) return;

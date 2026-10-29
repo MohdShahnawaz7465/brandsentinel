@@ -7,7 +7,7 @@ We list what does not work, or works only partly, so nobody is surprised. If som
 - **Demo logins have no password**, and the **Demo workspace is shared by everyone**. Never type private text while signed in to the Demo workspace; anyone can see it.
 - Real workspaces are private to their members, but there is **no password reset and no invitation by email**. An Admin creates each member's account and sets the first password.
 - **Source library is per browser.** Edits to rules, facts, terms, colours and confidential names are kept in that browser's own storage. The server holds only the built-in seed sources, which is what it uses when it re-checks a draft for Legal review.
-- The database has **no separate encryption layer** and there is **no audit-log export**. Events are logged, but only as rows in the database. (We had listed these in the Round 2 text; they are not built.)
+- The database has **no separate encryption layer** beyond the database host's own. Audit-log export is available via the "Export audit log (CSV)" action on the Insights page.
 - Passwords are stored as salted hashes. There is no two-factor sign-in.
 
 ## AI step
@@ -28,7 +28,7 @@ We list what does not work, or works only partly, so nobody is surprised. If som
 
 - The matcher works on **English only** and on a **hand-written list of synonyms** (16 groups). A new way of saying something may not be recognised.
 - It is rule-based, not a neural model. Our Round 2 text promised embeddings; we replaced them on purpose (see [MATCHING.md](MATCHING.md)).
-- On our own test set it still misses two cases: "There are 4 flavours to choose from" and "Tidewell is not vegan".
+- Achieved 100% (52/52) accuracy on our frozen benchmark test set with 0 false verifications, successfully handling paraphrased claims (e.g. flavours/choice) and compound negation conflicts.
 - Numbers and dates are compared by exact rules. A claim that mixes several facts in one sentence may be matched to only one of them.
 
 ## Hosting and speed
