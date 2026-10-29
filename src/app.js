@@ -30,7 +30,7 @@
   const setEntered = (v) => { entered = v; try { if (v) sessionStorage.setItem('brandsentinel.entered', '1'); else sessionStorage.removeItem('brandsentinel.entered'); } catch (e) { /* ignore */ } };
   if (signedIn()) state.userId = auth.user.id;
   async function api(path, opts) {
-    const o = opts || {}, ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), o.timeout || 8000);
+    const o = opts || {}, ctl = new AbortController(), timer = setTimeout(() => ctl.abort(),o.timeout || (o.method && o.method !== 'GET' ? 25000 : 8000));
     try {
       const headers = { 'Content-Type': 'application/json' }; if (auth.token) headers.Authorization = 'Bearer ' + auth.token;
       const res = await fetch(API_URL + path, { method: o.method || 'GET', signal: ctl.signal, headers, body: o.body ? JSON.stringify(o.body) : undefined });
