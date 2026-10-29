@@ -298,7 +298,7 @@ CONCEPTS = [
     ["calculate", "calculated", "calculates", "compute", "computed"],
     ["certify", "certified", "certification", "certifications"],
     ["corp", "corporation"],
-    ["available", "offer", "offered", "offers", "open", "here", "come", "comes", "choose", "choice", "select", "selection"],
+    ["available", "offer", "offered", "offers", "open", "here", "come", "comes"],
     ["support", "service", "help"],
     ["box", "boxes", "pack", "packs"],
     ["within", "inside"],
@@ -400,7 +400,7 @@ def match_fact(sentence: str, facts: list[dict]):
                 got += w
                 hit += 1
         score = got / total
-        ok = (hit >= 2 and score >= 0.6) or (len(ft) <= 2 and hit == len(ft)) or (hit >= 2 and score >= 0.45 and got >= 1.2)
+        ok = (hit >= 2 and score >= 0.6) or (len(ft) <= 2 and hit == len(ft))
         if ok and (best is None or score > best["score"] or (score == best["score"] and hit > best["overlap"])):
             best = {"fact": f, "score": score, "overlap": hit}
     if best:

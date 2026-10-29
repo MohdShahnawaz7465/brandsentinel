@@ -19,7 +19,7 @@
 
 ### 2. Meaning-based matching of claims to approved facts, with a measured test set (done)
 - The matcher understands rewording (ship / dispatch / deliver), numbers written as words ("five days"), spelling variants, opposite meaning ("not accepted" versus "accepted") and a different name ("Maine" versus "Oregon").
-- Measured on a frozen set of **52 claims**: right verdicts **38 to 52 of 52 (73.1% to 100%)**, reworded true claims found **16 to 23 of 23 (100%)**, wrong claims wrongly passed as "verified" **7 to 0**.
+- Measured on a frozen set of **52 claims**: right verdicts **38 to 50 of 52 (73.1% to 96.2%)**, reworded true claims found **16 to 22 of 23**, wrong claims wrongly passed as "verified" **7 to 0**.
 - It is rule-based, not a neural model (see "What changed from the plan"). Two known misses are listed in [MATCHING.md](MATCHING.md).
 
 ### 3. Private workspaces, real login, server-enforced Legal sign-off (done)

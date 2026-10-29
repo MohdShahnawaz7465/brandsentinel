@@ -185,7 +185,7 @@
     ['calculate', 'calculated', 'calculates', 'compute', 'computed'],
     ['certify', 'certified', 'certification', 'certifications'],
     ['corp', 'corporation'],
-    ['available', 'offer', 'offered', 'offers', 'open', 'here', 'come', 'comes', 'choose', 'choice', 'select', 'selection'],
+    ['available', 'offer', 'offered', 'offers', 'open', 'here', 'come', 'comes'],
     ['support', 'service', 'help'],
     ['box', 'boxes', 'pack', 'packs'],
     ['within', 'inside'],
@@ -256,7 +256,7 @@
       let total = 0, got = 0, hit = 0;
       for (const t of ft) { const w = 1 / df.get(t); total += w; if (st.has(t)) { got += w; hit++; } }
       const score = got / total;
-      const ok = (hit >= 2 && score >= 0.6) || (ft.length <= 2 && hit === ft.length) || (hit >= 2 && score >= 0.45 && got >= 1.2);
+      const ok = (hit >= 2 && score >= 0.6) || (ft.length <= 2 && hit === ft.length);
       if (ok && (!best || score > best.score || (score === best.score && hit > best.overlap))) best = { fact: f, score, overlap: hit };
     });
     if (best) {
