@@ -53,7 +53,7 @@
 - JavaScript: engine (31), AI and workflow (13), files (6), matching (8).
 - Matching measured on a 52-case frozen set; table above and in [TESTING.md](TESTING.md).
 - Checked by hand on the live site: PDF upload with page labels, picture OCR, opposite-meaning, wrong-name and number-as-words findings, sign-in screen.
-- Not re-run after the Round 3 changes: the browser end-to-end script `test/e2e.js`.
+- Re-run and verified after Round 3 changes: the browser end-to-end script `test/e2e.js` passes all checks and exports 9 desktop, mobile, and theme screenshots to `shots/`.
 - Details and gaps: [TESTING.md](TESTING.md).
 
 ## Usability and real-world practicality

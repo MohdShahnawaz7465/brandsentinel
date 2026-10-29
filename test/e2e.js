@@ -1,22 +1,63 @@
 // End-to-end run in headless Chromium. Usage: node test/e2e.js
-const path = require('path'), fs = require('fs');
-const { chromium } = require('/opt/npm-tools/node_modules/playwright');
+const path = require('path'), fs = require('fs'), os = require('os');
+const { pathToFileURL } = require('url');
+const { chromium } = require('playwright');
 const OUT = path.join(__dirname, '..', 'shots'); fs.mkdirSync(OUT, { recursive: true });
-const URL = 'file://' + path.join(__dirname, '..', 'dist', 'index.html');
-const jszipSrc = fs.readFileSync('/opt/npm-tools/node_modules/jszip/dist/jszip.min.js', 'utf8');
+const URL = pathToFileURL(path.join(__dirname, '..', 'dist', 'index.html')).href;
+
+let jszipSrc;
+try {
+  jszipSrc = fs.readFileSync(require.resolve('jszip/dist/jszip.min.js'), 'utf8');
+} catch (e) {
+  const localJszip = path.join(__dirname, '..', 'node_modules', 'jszip', 'dist', 'jszip.min.js');
+  if (fs.existsSync(localJszip)) {
+    jszipSrc = fs.readFileSync(localJszip, 'utf8');
+  } else if (fs.existsSync('/opt/npm-tools/node_modules/jszip/dist/jszip.min.js')) {
+    jszipSrc = fs.readFileSync('/opt/npm-tools/node_modules/jszip/dist/jszip.min.js', 'utf8');
+  } else {
+    throw new Error('Could not locate jszip.min.js');
+  }
+}
+
+// Temporary test file paths
+const docxPath = path.join(os.tmpdir(), '_bs_test.docx');
+const imgPath = path.join(os.tmpdir(), '_bs_img.png');
+
+if (!fs.existsSync(docxPath) || !fs.existsSync(imgPath)) {
+  const { execFileSync } = require('child_process');
+  const py = `import docx, sys, tempfile, os; from PIL import Image; from docx.shared import Inches; tmp = os.path.join(tempfile.gettempdir(), '_bs.png'); Image.new('RGB',(40,40),(20,33,61)).save(tmp); d = docx.Document(); d.add_paragraph('Hey guys! Tidewell is cheap & cheerful.'); d.add_paragraph('Second line with 600 mg of sodium.'); d.add_picture(tmp, width=Inches(1)); d.save(sys.argv[1]); Image.new('RGB',(100,100),(153,153,153)).save(sys.argv[2])`;
+  for (const p of ['python', 'python3']) {
+    try { execFileSync(p, ['-c', py, docxPath, imgPath]); break; } catch (e) {}
+  }
+}
+
 let failures = 0;
 const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) failures++; };
 
 (async () => {
-  const exe = fs.readdirSync('/opt/pw-browsers').filter((d) => /^chromium-/.test(d)).map((d) => `/opt/pw-browsers/${d}/chrome-linux/chrome`).find(fs.existsSync);
-  const browser = await chromium.launch({ executablePath: exe || undefined, args: ['--no-sandbox'] });
+  let exe;
+  if (fs.existsSync('/opt/pw-browsers')) {
+    exe = fs.readdirSync('/opt/pw-browsers').filter((d) => /^chromium-/.test(d)).map((d) => `/opt/pw-browsers/${d}/chrome-linux/chrome`).find(fs.existsSync);
+  } else if (process.platform === 'win32') {
+    const winChromes = [
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
+    ];
+    exe = winChromes.find(fs.existsSync);
+  }
+  const launchOpts = { args: ['--no-sandbox'] };
+  if (exe) launchOpts.executablePath = exe;
+  else if (process.platform === 'win32') launchOpts.channel = 'chrome';
+
+  const browser = await chromium.launch(launchOpts);
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
-  page.on('console', (m) => { if (m.type() === 'error' && !/fonts|ERR_(NAME|INTERNET|CONNECTION|PROXY|TUNNEL)|Failed to load resource/i.test(m.text())) errors.push('console: ' + m.text()); });
+  page.on('console', (m) => { if (m.type() === 'error' && !/fonts|CORS|Access-Control|ERR_(NAME|INTERNET|CONNECTION|PROXY|TUNNEL)|Failed to load resource/i.test(m.text())) errors.push('console: ' + m.text()); });
   // JSZip normally comes from the CDN; use the local copy. Mock the claude.ai "sample" capability.
-  await page.route(/cdnjs|googleapis|gstatic/, (r) => r.request().url().includes('jszip') ? r.fulfill({ contentType: 'text/javascript', body: jszipSrc }) : r.abort());
+  await page.route(/cdnjs|googleapis|gstatic|brandsentinel-api/, (r) => r.request().url().includes('jszip') ? r.fulfill({ contentType: 'text/javascript', body: jszipSrc }) : r.abort());
   await page.addInitScript(() => {
     window.__prompts = [];
     window.claude = { use: async (n) => n === 'sample' ? { json: async (p) => { window.__prompts.push(p); return { findings: [{ segment: 0, quote: 'Tidewell comes in 5 flavours', sourceId: 'F-08', category: 'claim', severity: 'medium', title: 'AI: flavour count', explanation: 'x', confidence: 0.7, suggestions: [] }, { segment: 0, quote: 'nope', sourceId: 'G-77', title: 'invented' }] }; } } : null };
@@ -24,6 +65,13 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) failure
   await page.goto(URL);
   await page.waitForSelector('#app .brand');
   ok(true, 'page loads');
+
+  // In Round 3 with BS_API_URL set, enter browser-only mode if gate screen is shown
+  const enterBtn = page.locator('[data-a=enter]');
+  if (await enterBtn.count() && await enterBtn.first().isVisible()) {
+    await enterBtn.first().click();
+  }
+  await page.waitForSelector('#sample');
 
   // ---- review
   await page.selectOption('#sample', 's1');
@@ -118,14 +166,14 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) failure
 
   // ---- docx upload
   await page.click('[data-a=newreview]');
-  await page.setInputFiles('#file', '/tmp/_bs_test.docx');
+  await page.setInputFiles('#file', docxPath);
   await page.waitForFunction(() => document.getElementById('text') && document.getElementById('text').value.includes('600 mg'));
   await page.click('[data-a=check]'); await page.waitForSelector('.f');
   ok(await page.locator('article.f', { hasText: 'no alt text' }).count() === 1, 'docx: picture without alt text is flagged');
 
   // ---- image check
   await page.click('[data-a=newreview]'); await page.click('[data-a=mode][data-v=image]');
-  await page.setInputFiles('#img', '/tmp/_bs_img.png'); await page.waitForSelector('#alt');
+  await page.setInputFiles('#img', imgPath); await page.waitForSelector('#alt');
   await page.check('#usecontrast'); await page.fill('#fg', '#999999'); await page.fill('#alt', '');
   await page.click('[data-a=check]'); await page.waitForSelector('.f');
   const imgT = await page.locator('#app').innerText();

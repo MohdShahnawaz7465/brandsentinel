@@ -8,12 +8,19 @@
     "test": "test"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test test/engine.test.js test/ai-workflow.test.js test/files.test.js test/matching.test.js",
+    "test:unit": "node --test test/engine.test.js test/ai-workflow.test.js test/files.test.js test/matching.test.js",
+    "test:matching": "node tools/measure_matching.js",
+    "test:e2e": "node test/e2e.js",
+    "build": "node build.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "jszip": "^3.10.2"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.1"
   }
 }
